@@ -5,11 +5,18 @@ public class User {
     public static final int ID_SIZE = 4;
     public static final int USERNAME_SIZE = 32;
     public static final int EMAIL_SIZE = 255;
+
+    public static final int ID_OFFSET = 0;
+    public static final int USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
+    public static final int EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
+
     public static final int ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
 
     private int id;
     private String username;
     private String email;
+
+    public User() {}
 
     public User(int id, String username, String email) {
         this.id = id;

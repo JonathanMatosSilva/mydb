@@ -1,5 +1,8 @@
 package br.com.mydb;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.util.Scanner;
 
 public class Main {
@@ -63,14 +66,19 @@ public class Main {
      */
     private static void handleStatement(String input) {
 
-        String[] parts = input.split(" ", 2);
+        String[] parts = input.split(" ");
         String command = parts[0].toLowerCase();
 
         switch (command) {
             case "insert":
-                System.out.println("Executando um INSERT... (logica a ser implementada)");
                 if (parts.length > 1) {
-                    System.out.println("  -> Dados: " + parts[1]);
+
+                    int id = Integer.parseInt(parts[1]);
+                    String username = parts[2];
+                    String email = parts[3];
+                    User user = new User(id, username, email);
+
+                    executeInsert(user);
                 }
                 break;
 
@@ -82,5 +90,36 @@ public class Main {
                 System.out.println("Comando SQL nao reconhecido: " + command);
                 break;
         }
+    }
+
+    private static void executeInsert(User user) {
+
+        ByteBuffer buffer = ByteBuffer.allocateDirect(User.ROW_SIZE);
+        buffer.order(ByteOrder.nativeOrder());
+
+        buffer.putInt(User.ID_OFFSET, user.getId());
+        buffer.put(User.USERNAME_OFFSET, user.getUsername().getBytes());
+        buffer.put(User.EMAIL_OFFSET, user.getEmail().getBytes());
+
+        System.out.println("Bloco de memória preenchido.");
+        System.out.println("------------------------------------");
+
+        int idLido = buffer.getInt(User.ID_OFFSET);
+
+        byte[] usernameBytes = new byte[User.USERNAME_SIZE];
+        buffer.position(User.USERNAME_OFFSET);
+        buffer.get(usernameBytes);
+        String usernameLido = new String(usernameBytes, StandardCharsets.UTF_8).trim();
+
+        byte[] emailBytes = new byte[User.EMAIL_OFFSET];
+        buffer.position(User.EMAIL_OFFSET);
+        buffer.get(emailBytes);
+        String emailLido = new String(emailBytes, StandardCharsets.UTF_8).trim();
+
+        System.out.println("Valores lidos: ID=" + idLido + ", username=" + usernameLido + ", email=" + emailLido);
+
+        assert idLido == user.getId();
+        assert usernameLido.equals(user.getUsername());
+        assert emailLido.equals(user.getEmail());
     }
 }
