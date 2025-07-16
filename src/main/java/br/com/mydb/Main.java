@@ -3,6 +3,7 @@ package br.com.mydb;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class Main {
@@ -93,33 +94,14 @@ public class Main {
     }
 
     private static void executeInsert(User user) {
-
-        ByteBuffer buffer = ByteBuffer.allocateDirect(User.ROW_SIZE);
-        buffer.order(ByteOrder.nativeOrder());
-
-        buffer.putInt(User.ID_OFFSET, user.getId());
-        buffer.put(User.USERNAME_OFFSET, user.getUsername().getBytes());
-        buffer.put(User.EMAIL_OFFSET, user.getEmail().getBytes());
+        byte[] userBytes = user.toBytes();
 
         System.out.println("Bloco de memória preenchido.");
         System.out.println("------------------------------------");
 
-        int idLido = buffer.getInt(User.ID_OFFSET);
+        User userObj = User.fromBytes(userBytes);
 
-        byte[] usernameBytes = new byte[User.USERNAME_SIZE];
-        buffer.position(User.USERNAME_OFFSET);
-        buffer.get(usernameBytes);
-        String usernameLido = new String(usernameBytes, StandardCharsets.UTF_8).trim();
+        System.out.println("Valores lidos: ID=" + userObj.getId() + ", username=" + userObj.getUsername() + ", email=" + userObj.getEmail());
 
-        byte[] emailBytes = new byte[User.EMAIL_OFFSET];
-        buffer.position(User.EMAIL_OFFSET);
-        buffer.get(emailBytes);
-        String emailLido = new String(emailBytes, StandardCharsets.UTF_8).trim();
-
-        System.out.println("Valores lidos: ID=" + idLido + ", username=" + usernameLido + ", email=" + emailLido);
-
-        assert idLido == user.getId();
-        assert usernameLido.equals(user.getUsername());
-        assert emailLido.equals(user.getEmail());
     }
 }

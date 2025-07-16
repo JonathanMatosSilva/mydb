@@ -1,5 +1,9 @@
 package br.com.mydb;
 
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
+
 public class User {
 
     public static final int ID_SIZE = 4;
@@ -46,6 +50,36 @@ public class User {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public byte[] toBytes() {
+        ByteBuffer buffer = ByteBuffer.allocate(User.ROW_SIZE);
+        buffer.order(ByteOrder.nativeOrder());
+
+        buffer.putInt(User.ID_OFFSET, id);
+        buffer.put(User.USERNAME_OFFSET, username.getBytes());
+        buffer.put(User.EMAIL_OFFSET, email.getBytes());
+
+        return buffer.array();
+    }
+
+    public static User fromBytes(byte[] rowData) {
+        ByteBuffer buffer = ByteBuffer.wrap(rowData);
+        buffer.order(ByteOrder.nativeOrder());
+
+        int idLido = buffer.getInt(User.ID_OFFSET);
+
+        byte[] usernameBytes = new byte[User.USERNAME_SIZE];
+        buffer.position(User.USERNAME_OFFSET);
+        buffer.get(usernameBytes);
+        String usernameLido = new String(usernameBytes, StandardCharsets.UTF_8).trim();
+
+        byte[] emailBytes = new byte[User.EMAIL_SIZE];
+        buffer.position(User.EMAIL_OFFSET);
+        buffer.get(emailBytes);
+        String emailLido = new String(emailBytes, StandardCharsets.UTF_8).trim();
+
+        return new User(idLido, usernameLido, emailLido);
     }
 
     @Override
