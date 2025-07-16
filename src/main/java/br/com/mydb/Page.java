@@ -21,11 +21,13 @@ public class Page {
     }
 
     public byte getPageType() {
-        return this.data[0];
+        ByteBuffer buffer = ByteBuffer.wrap(data);
+        return buffer.get(PAGE_TYPE_OFFSET);
     }
 
     public void setPageType(byte type) {
-        this.data[0] = type;
+        ByteBuffer buffer = ByteBuffer.wrap(data);
+        buffer.put(PAGE_TYPE_OFFSET, type);
     }
 
     public int getRowCount() {
