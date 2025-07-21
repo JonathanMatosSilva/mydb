@@ -17,7 +17,7 @@ public class Page {
     public Page(int pageNumber, byte[] data) {
         this.pageNumber = pageNumber;
         this.data = data;
-        this.isDirty = false; // Uma página recém-lida do disco nunca está "suja".
+        this.isDirty = false;
     }
 
     public byte getPageType() {

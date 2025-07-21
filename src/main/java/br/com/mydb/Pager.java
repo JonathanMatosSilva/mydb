@@ -27,8 +27,9 @@ public class Pager {
     }
 
     public Page getPage(int pageNumber) throws IOException {
-        if (pageNumber < numPages) {
-            System.out.println("O numero da pagina requisitada excede a quantidade total de paginas.");
+        if (pageNumber > numPages) {
+            System.out.println("O numero da pagina requisitada excede a quantidade total de paginas. " + pageNumber + "-" + numPages);
+            return null;
         }
 
         if (pageCache.containsKey(pageNumber)) {
@@ -67,5 +68,13 @@ public class Pager {
                 flushPage(entry.getValue());
             }
         }
+    }
+
+    public int getNumPages() {
+        return numPages;
+    }
+
+    public int getPageSize() {
+        return pageSize;
     }
 }

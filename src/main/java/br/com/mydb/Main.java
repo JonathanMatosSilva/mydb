@@ -1,20 +1,22 @@
 package br.com.mydb;
 
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.io.IOException;
 import java.util.Scanner;
 
 public class Main {
 
-    public static void main(String[] args) {
+    private static Table table;
+
+    public static void main(String[] args) throws IOException {
         if (args.length == 0) {
             System.out.println("Erro: Forneça o nome do arquivo de banco de dados como argumento.");
             System.exit(1);
         }
         String databaseFilename = args[0];
         System.out.println("Usando o arquivo de banco de dados: " + databaseFilename);
+
+        Database database = new Database(databaseFilename);
+        table = database.openTable();
 
         Scanner scanner = new Scanner(System.in);
 
@@ -65,7 +67,7 @@ public class Main {
      * Processa comandos SQL (ou similares).
      * @param input O comando digitado pelo usuário.
      */
-    private static void handleStatement(String input) {
+    private static void handleStatement(String input) throws IOException {
 
         String[] parts = input.split(" ");
         String command = parts[0].toLowerCase();
@@ -79,12 +81,18 @@ public class Main {
                     String email = parts[3];
                     User user = new User(id, username, email);
 
-                    executeInsert(user);
+                    table.insert(user);
                 }
                 break;
 
             case "select":
-                System.out.println("Executando um SELECT... (logica a ser implementada)");
+                Cursor cursor = table.start();
+
+                while (!cursor.isEndOfTable()) {
+                    User currentRow = cursor.getValue();
+                    System.out.println("Usuário encontrado: " + currentRow);
+                    cursor.advance();
+                }
                 break;
 
             default:
@@ -94,14 +102,6 @@ public class Main {
     }
 
     private static void executeInsert(User user) {
-        byte[] userBytes = user.toBytes();
-
-        System.out.println("Bloco de memória preenchido.");
-        System.out.println("------------------------------------");
-
-        User userObj = User.fromBytes(userBytes);
-
-        System.out.println("Valores lidos: ID=" + userObj.getId() + ", username=" + userObj.getUsername() + ", email=" + userObj.getEmail());
 
     }
 }
