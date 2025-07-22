@@ -64,4 +64,8 @@ public class Page {
     public byte[] getBytes() {
         return this.data;
     }
+
+    public void markAsDirty() {
+        this.isDirty = true;
+    }
 }

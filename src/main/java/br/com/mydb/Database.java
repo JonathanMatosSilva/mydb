@@ -3,13 +3,20 @@ package br.com.mydb;
 import java.io.IOException;
 
 public class Database {
-    private Pager pager;
+    private final Pager pager;
 
     public Database(String databaseFilePath) throws IOException {
         this.pager = new Pager(databaseFilePath, 4096);
     }
 
     public Table openTable() throws IOException {
+        if (pager.getNumPages() == 0) {
+            Page page = pager.newPage();
+            page.setPageType(PageType.BTREE_LEAF_NODE.value);
+            page.setRowCount(0);
+            int rootPageNumber = 0;
+            return new Table(this.pager, rootPageNumber);
+        }
         int rootPageNumber = readRootPageNumberFromHeader();
         return new Table(this.pager, rootPageNumber);
     }
