@@ -4,10 +4,11 @@ import java.nio.ByteBuffer;
 
 public class Page {
 
-    private static final int PAGE_TYPE_OFFSET = 0;
-    private static final int ROW_COUNT_OFFSET = 1;
+    private static final int PAGE_TYPE_OFFSET = 0; // 1 byte
+    private static final int ROW_COUNT_OFFSET = 1; // 2 bytes
+    public static final int NEXT_SIBLING_POINTER_OFFSET = 3; // 4 bytes
 
-    public static final int HEADER_SIZE = 3;
+    public static final int HEADER_SIZE = 1 + 2 + 4; // 7 bytes
 
     private final int pageNumber;
     private final byte[] data;
@@ -68,4 +69,5 @@ public class Page {
     public void markAsDirty() {
         this.isDirty = true;
     }
+
 }

@@ -69,36 +69,47 @@ public class Main {
      */
     private static void handleStatement(String input) throws IOException {
 
-        String[] parts = input.split(" ");
-        String command = parts[0].toLowerCase();
+        String[] commands = input.split(";");
 
-        switch (command) {
-            case "insert":
-                if (parts.length > 1) {
-
-                    int id = Integer.parseInt(parts[1]);
-                    String username = parts[2];
-                    String email = parts[3];
-                    User user = new User(id, username, email);
-
-                    table.insert(user);
-                }
-                break;
-
-            case "select":
-                Cursor cursor = table.start();
-
-                while (!cursor.isEndOfTable()) {
-                    User currentRow = cursor.getValue();
-                    System.out.println("Usuário encontrado: " + currentRow);
-                    cursor.advance();
-                }
-                break;
-
-            default:
-                System.out.println("Comando SQL nao reconhecido: " + command);
-                break;
+        if (commands.length == 0) {
+            System.out.println("Comando de fim de linha não identificado.");
+            return;
         }
+
+        for (int i = 0; i <= commands.length -1; i++) {
+
+            String[] parts = commands[i].split(" ");
+            String command = parts[0].toLowerCase();
+
+            switch (command) {
+                case "insert":
+                    if (parts.length > 1) {
+
+                        int id = Integer.parseInt(parts[1]);
+                        String username = parts[2];
+                        String email = parts[3];
+                        User user = new User(id, username, email);
+
+                        table.insert(user);
+                    }
+                    break;
+
+                case "select":
+                    Cursor cursor = table.start();
+
+                    while (!cursor.isEndOfTable()) {
+                        User currentRow = cursor.getValue();
+                        System.out.println("Usuário encontrado: " + currentRow);
+                        cursor.advance();
+                    }
+                    break;
+
+                default:
+                    System.out.println("Comando SQL nao reconhecido: " + command);
+                    break;
+            }
+        }
+
     }
 
     private static void executeInsert(User user) {
