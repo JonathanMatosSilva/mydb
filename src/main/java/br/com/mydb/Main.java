@@ -2,6 +2,7 @@ package br.com.mydb;
 
 import java.io.IOException;
 import java.util.Scanner;
+import java.util.regex.Pattern;
 
 public class Main {
 
@@ -22,7 +23,8 @@ public class Main {
 
         while (true) {
             printPrompt();
-            String input = scanner.nextLine().trim();
+            scanner.useDelimiter(";");
+            String input = scanner.next().trim();
 
             if (input.isEmpty()) {
                 continue;
@@ -70,13 +72,13 @@ public class Main {
     private static void handleStatement(String input) throws IOException {
 
         String[] commands = input.split(";");
-
+        System.out.println(commands[0]);
         if (commands.length == 0) {
             System.out.println("Comando de fim de linha não identificado.");
             return;
         }
 
-        for (int i = 0; i <= commands.length -1; i++) {
+        for (int i = 0; i < commands.length; i++) {
 
             String[] parts = commands[i].split(" ");
             String command = parts[0].toLowerCase();
