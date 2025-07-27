@@ -1,6 +1,7 @@
 package br.com.mydb;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 
 public class Table {
 
@@ -191,15 +192,32 @@ public class Table {
         this.pager.flushPage(parentNode.getPage());
     }
 
-    public Cursor find(int key) throws IOException {
-        Cursor cursor = this.start();
 
-        while (!cursor.isEndOfTable()) {
-            User currentRow = cursor.getValue();
-            if (currentRow.getId() == key) {
-                return cursor;
+    public Cursor find(int key) throws IOException {
+        Page rootPage = this.pager.getPage(this.rootPageNumber);
+        BTreeNode node = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
+
+        while (!node.isLeaf()) {
+            int childIndex = findNextChildIndex(node, key);
+            int childPageNumber = node.getChildPointer(childIndex);
+            Page childPage = this.pager.getPage(childPageNumber);
+            node = new BTreeNode(childPage, BTREE_MIN_DEGREE);
+        }
+
+        int left = 0;
+        int right = node.getKeyCount() - 1;
+
+        while (left <= right) {
+            int mid = left + (right - left) / 2;
+            int midKey = node.getKey(mid);
+
+            if (midKey == key) {
+                return new Cursor(this, node.getPageNumber(), mid);
+            } else if (midKey < key) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
             }
-            cursor.advance();
         }
         return null;
     }
@@ -290,4 +308,7 @@ public class Table {
         return this.rootPageNumber;
     }
 
+    public Pager getPager() {
+        return pager;
+    }
 }

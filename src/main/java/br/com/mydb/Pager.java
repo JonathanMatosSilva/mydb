@@ -76,4 +76,11 @@ public class Pager {
     public int getPageSize() {
         return pageSize;
     }
+
+    public byte[] readBytesAt(long offset, int length) throws IOException {
+        databaseFile.seek(offset);
+        byte[] data = new byte[length];
+        databaseFile.readFully(data);
+        return data;
+    }
 }

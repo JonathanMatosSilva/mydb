@@ -72,16 +72,7 @@ public class Main {
      */
     private static void handleStatement(String input) throws IOException {
 
-        String[] commands = input.split(";");
-
-        if (commands.length == 0) {
-            System.out.println("Comando de fim de linha não identificado.");
-            return;
-        }
-
-        for (int i = 0; i < commands.length; i++) {
-
-            String[] parts = commands[i].split(" ");
+            String[] parts = input.split(" ");
             String command = parts[0].toLowerCase();
 
             switch (command) {
@@ -98,24 +89,22 @@ public class Main {
                     break;
 
                 case "select":
-                    Cursor cursor = table.start();
-
-                    while (!cursor.isEndOfTable()) {
-                        User currentRow = cursor.getValue();
-                        System.out.println("Usuário encontrado: " + currentRow);
-                        cursor.advance();
+                    if (parts.length > 1) {
+                        int key = Integer.parseInt(parts[1]);
+                        Cursor cursor = table.find(key);
+                        if (cursor != null) {
+                            User currentRow = cursor.getValue();
+                            System.out.println("Usuário encontrado: " + currentRow);
+                        } else {
+                            System.out.println("Usuário não encontrado");
+                        }
                     }
+
                     break;
 
                 default:
                     System.out.println("Comando SQL nao reconhecido: " + command);
                     break;
             }
-        }
-
-    }
-
-    private static void executeInsert(User user) {
-
     }
 }

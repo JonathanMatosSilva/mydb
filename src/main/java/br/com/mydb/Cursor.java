@@ -17,9 +17,12 @@ public class Cursor {
     }
 
     public User getValue() throws IOException {
-        Page page = table.getPage(this.pageNumber);
+        Page leafPage = table.getPage(this.pageNumber);
+        BTreeNode leafNode = new BTreeNode(leafPage, Table.BTREE_MIN_DEGREE);
 
-        byte[] rowData = page.getRow(this.cellNumber);
+        long dataOffset = leafNode.getDataPointer(this.cellNumber);
+        byte[] rowData = table.getPager().readBytesAt(dataOffset, User.ROW_SIZE);
+
         return User.fromBytes(rowData);
     }
 
