@@ -31,8 +31,6 @@ public class Table {
             newRootPage.setPageType(PageType.BTREE_INTERNAL_NODE.value);
             BTreeNode newRoot = new BTreeNode(newRootPage, BTREE_MIN_DEGREE);
 
-            newRoot.setChildPointer(0, rootNode.getPageNumber());
-
             PromotedKey promotedKey;
             if (rootNode.isLeaf()) {
                 promotedKey = splitLeafNode(rootNode);
@@ -41,11 +39,13 @@ public class Table {
             }
 
             newRoot.setKey(0, promotedKey.getKey());
+            newRoot.setChildPointer(0, rootNode.getPageNumber());
             newRoot.setChildPointer(1, promotedKey.getRightChildPageNumber());
             newRoot.setKeyCount(1);
 
             this.rootPageNumber = newRoot.getPageNumber();
-            pager.flushPage(newRoot.getPage());
+            this.pager.flushPage(newRoot.getPage());
+
         }
 
         insertIntoSubtree(this.rootPageNumber, keyToInsert, dataOffset);
@@ -58,7 +58,6 @@ public class Table {
 
         if (node.isLeaf()) {
             insertIntoLeaf(node, key, dataOffset);
-            this.pager.flushPage(currentPage);
             return;
         }
 
@@ -69,7 +68,6 @@ public class Table {
         BTreeNode childNode = new BTreeNode(childPage, BTREE_MIN_DEGREE);
 
         if (childNode.getKeyCount() == MAX_KEYS_PER_NODE) {
-            System.out.println("Split no interno");
             splitChildNode(node, childIndex, childNode);
 
             if (key > node.getKey(childIndex)) {
@@ -99,8 +97,6 @@ public class Table {
         }
 
         insertIntoInternalNode(parentNode, childIndex, promotedKey);
-
-        this.pager.flushPage(parentNode.getPage());
     }
 
 
@@ -120,6 +116,7 @@ public class Table {
         node.setKey(slotToInsert, key);
         node.setDataPointer(slotToInsert, dataOffset);
         node.setKeyCount(currentKeyCount + 1);
+        this.pager.flushPage(node.getPage());
     }
 
     private PromotedKey splitLeafNode(BTreeNode nodeToSplit) throws IOException {
@@ -142,18 +139,45 @@ public class Table {
 
         PromotedKey promotedKey = new PromotedKey(rightNode.getKey(0), rightNode.getPageNumber());
 
+        rightNode.setNextSiblingPointer(nodeToSplit.getNextSiblingPointer());
+        nodeToSplit.setNextSiblingPointer(rightNode.getPageNumber());
+
+        this.pager.flushPage(nodeToSplit.getPage());
+        this.pager.flushPage(rightNode.getPage());
+
         return promotedKey;
     }
 
-    /**
-     * (Futuro) Divide um nó interno cheio. A lógica é similar à de um nó folha,
-     * mas lida com ponteiros para filhos em vez de ponteiros para dados.
-     */
     private PromotedKey splitInternalNode(BTreeNode nodeToSplit) throws IOException {
-        throw new UnsupportedOperationException("Split de nó interno ainda não implementado.");
+        Page rightPage = this.pager.newPage();
+        rightPage.setPageType(PageType.BTREE_INTERNAL_NODE.value);
+        BTreeNode rightNode = new BTreeNode(rightPage, BTREE_MIN_DEGREE);
+
+        int middleIndex = BTREE_MIN_DEGREE - 1;
+        int promotedKey = nodeToSplit.getKey(middleIndex);
+
+        int j = 0;
+        for (int i = middleIndex + 1; i <= nodeToSplit.getKeyCount(); i++) {
+            rightNode.setKey(j, nodeToSplit.getKey(i));
+            j++;
+        }
+
+        j = 0;
+        for (int i = middleIndex + 1; i <= nodeToSplit.getKeyCount(); i++) {
+            rightNode.setChildPointer(j, nodeToSplit.getChildPointer(i));
+            j++;
+        }
+
+        nodeToSplit.setKeyCount(middleIndex);
+        rightNode.setKeyCount(j - 1);
+
+        this.pager.flushPage(nodeToSplit.getPage());
+        this.pager.flushPage(rightNode.getPage());
+
+        return new PromotedKey(promotedKey, rightNode.getPageNumber());
     }
 
-    private void insertIntoInternalNode(BTreeNode parentNode, int index, PromotedKey promotedKey) {
+    private void insertIntoInternalNode(BTreeNode parentNode, int index, PromotedKey promotedKey) throws IOException {
         for (int i = parentNode.getKeyCount(); i > index; i--) {
             parentNode.setKey(i, parentNode.getKey(i - 1));
             parentNode.setChildPointer(i + 1, parentNode.getChildPointer(i));
@@ -163,6 +187,8 @@ public class Table {
         parentNode.setChildPointer(index + 1, promotedKey.getRightChildPageNumber());
 
         parentNode.setKeyCount(parentNode.getKeyCount() + 1);
+
+        this.pager.flushPage(parentNode.getPage());
     }
 
     public Cursor find(int key) throws IOException {

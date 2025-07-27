@@ -72,7 +72,7 @@ public class Main {
     private static void handleStatement(String input) throws IOException {
 
         String[] commands = input.split(";");
-        System.out.println(commands[0]);
+
         if (commands.length == 0) {
             System.out.println("Comando de fim de linha não identificado.");
             return;
