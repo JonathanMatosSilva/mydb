@@ -32,6 +32,7 @@ public class Main {
 
             if (input.startsWith(".")) {
                 if (handleMetaCommand(input)) {
+                    database.close(table);
                     break;
                 }
                 continue;

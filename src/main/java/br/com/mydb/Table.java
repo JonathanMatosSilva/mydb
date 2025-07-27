@@ -286,4 +286,8 @@ public class Table {
         }
     }
 
+    public int getRootPageNumber() {
+        return this.rootPageNumber;
+    }
+
 }
