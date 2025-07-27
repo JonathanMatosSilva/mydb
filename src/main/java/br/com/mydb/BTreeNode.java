@@ -7,6 +7,8 @@ public class BTreeNode {
     private final Page page;
     private final int order;
 
+    public static final int NULL_POINTER = -1;
+
     private static final int KEY_SIZE = 4;
     private static final int POINTER_SIZE = 8;
     private static final int CELL_SIZE = KEY_SIZE + POINTER_SIZE;

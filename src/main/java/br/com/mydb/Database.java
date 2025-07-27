@@ -15,6 +15,10 @@ public class Database {
             page.setPageType(PageType.BTREE_LEAF_NODE.value);
             page.setRowCount(0);
             int rootPageNumber = 0;
+
+            BTreeNode rootNode = new BTreeNode(page, Table.BTREE_MIN_DEGREE);
+            rootNode.setNextSiblingPointer(BTreeNode.NULL_POINTER);
+
             return new Table(this.pager, rootPageNumber);
         }
         int rootPageNumber = readRootPageNumberFromHeader();
