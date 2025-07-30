@@ -11,10 +11,7 @@ public class BTreeNode {
 
     private static final int KEY_SIZE = 4;
     private static final int POINTER_SIZE = 8;
-    private static final int CELL_SIZE = KEY_SIZE + POINTER_SIZE;
-    
     private static final int CHILD_POINTER_SIZE = 4;
-    private static final int CHILD_SIZE = KEY_SIZE + CHILD_POINTER_SIZE;
 
     public BTreeNode(Page pager, int order) {
         this.page = pager;
@@ -25,51 +22,55 @@ public class BTreeNode {
         return this.page.getPageType() == PageType.BTREE_LEAF_NODE.value;
     }
 
-    private int getCellOffset(int index) {
-        if (!isLeaf()) {
-            return Page.HEADER_SIZE + (index * CHILD_SIZE);
+    private int getLeafCellSize() {
+        return KEY_SIZE + POINTER_SIZE;
+    }
 
-        }
-        return Page.HEADER_SIZE + (index * CELL_SIZE);
+    private int getLeafCellOffset(int index) {
+        return Page.HEADER_SIZE + (index * getLeafCellSize());
+    }
+
+    private int getLeafKeyOffset(int index) {
+        return getLeafCellOffset(index);
+    }
+
+    private int getLeafDataPointerOffset(int index) {
+        return getLeafCellOffset(index) + KEY_SIZE;
+    }
+
+    private int getInternalChildPointerOffset(int index) {
+        return Page.HEADER_SIZE + (index * (KEY_SIZE + CHILD_POINTER_SIZE));
+    }
+
+    private int getInternalKeyOffset(int index) {
+        return getInternalChildPointerOffset(index) + CHILD_POINTER_SIZE;
     }
 
     public int getKey(int index) {
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        return buffer.getInt(getCellOffset(index));
+        int offset = isLeaf() ? getLeafKeyOffset(index) : getInternalKeyOffset(index);
+        return ByteBuffer.wrap(this.page.getBytes()).getInt(offset);
     }
 
     public void setKey(int index, int key) {
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        buffer.putInt(getCellOffset(index), key);
+        int offset = isLeaf() ? getLeafKeyOffset(index) : getInternalKeyOffset(index);
+        ByteBuffer.wrap(this.page.getBytes()).putInt(offset, key);
         this.page.markAsDirty();
-    }
-
-    public int getKeyCount() {
-        return this.page.getRowCount();
-    }
-
-    public void setKeyCount(int count) {
-        this.page.setRowCount(count);
-    }
-
-    public int getPageNumber() {
-        return this.page.getPageNumber();
     }
 
     public long getDataPointer(int index) {
         if (!isLeaf()) {
             throw new IllegalStateException("Não se pode obter um ponteiro de dados de um nó interno.");
         }
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        return buffer.getLong(getCellOffset(index) + KEY_SIZE);
+        int offset = getLeafDataPointerOffset(index);
+        return ByteBuffer.wrap(this.page.getBytes()).getLong(offset);
     }
 
     public void setDataPointer(int index, long pointer) {
         if (!isLeaf()) {
             throw new IllegalStateException("Não se pode definir um ponteiro de dados em um nó interno.");
         }
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        buffer.putLong(getCellOffset(index) + KEY_SIZE, pointer);
+        int offset = getLeafDataPointerOffset(index);
+        ByteBuffer.wrap(this.page.getBytes()).putLong(offset, pointer);
         this.page.markAsDirty();
     }
 
@@ -77,21 +78,17 @@ public class BTreeNode {
         if (isLeaf()) {
             throw new IllegalStateException("Não se pode obter um filho de um nó folha.");
         }
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        return buffer.getInt(getCellOffset(index) + KEY_SIZE);
+        int offset = getInternalChildPointerOffset(index);
+        return ByteBuffer.wrap(this.page.getBytes()).getInt(offset);
     }
 
     public void setChildPointer(int index, int pageNumber) {
         if (isLeaf()) {
             throw new IllegalStateException("Não se pode definir um filho em um nó folha.");
         }
-        ByteBuffer buffer = ByteBuffer.wrap(this.page.getBytes());
-        buffer.putInt(getCellOffset(index) + KEY_SIZE, pageNumber);
+        int offset = getInternalChildPointerOffset(index);
+        ByteBuffer.wrap(this.page.getBytes()).putInt(offset, pageNumber);
         page.markAsDirty();
-    }
-
-    public Page getPage() {
-        return this.page;
     }
 
     public int getNextSiblingPointer() {
@@ -110,4 +107,21 @@ public class BTreeNode {
         buffer.putInt(Page.NEXT_SIBLING_POINTER_OFFSET, pageNumber);
         page.markAsDirty();
     }
+
+    public int getKeyCount() {
+        return this.page.getRowCount();
+    }
+
+    public void setKeyCount(int count) {
+        this.page.setRowCount(count);
+    }
+
+    public int getPageNumber() {
+        return this.page.getPageNumber();
+    }
+
+    public Page getPage() {
+        return this.page;
+    }
+
 }
