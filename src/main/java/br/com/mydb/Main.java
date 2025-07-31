@@ -1,12 +1,14 @@
 package br.com.mydb;
 
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
-import java.util.regex.Pattern;
 
 public class Main {
 
-    private static Table table;
+    private static Database database;
+    private static Map<String, Table> openTables = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
         if (args.length == 0) {
@@ -16,8 +18,7 @@ public class Main {
         String databaseFilename = args[0];
         System.out.println("Usando o arquivo de banco de dados: " + databaseFilename);
 
-        Database database = new Database(databaseFilename);
-        table = database.openTable();
+        database = new Database(databaseFilename);
 
         Scanner scanner = new Scanner(System.in);
 
@@ -32,7 +33,7 @@ public class Main {
 
             if (input.startsWith(".")) {
                 if (handleMetaCommand(input)) {
-                    database.close(table);
+                    database.close(openTables);
                     break;
                 }
                 continue;
@@ -75,29 +76,55 @@ public class Main {
             String[] parts = input.split(" ");
             String command = parts[0].toLowerCase();
 
+            Table table;
+
             switch (command) {
-                case "insert":
-                    if (parts.length > 1) {
-
-                        int id = Integer.parseInt(parts[1]);
-                        String username = parts[2];
-                        String email = parts[3];
-                        User user = new User(id, username, email);
-
-                        table.insert(user);
+                case "create":
+                    if (parts.length != 4 || !parts[1].equals("table")) {
+                        System.out.println("Comando inválido. Use: create table <nome> <tamanho_linha>");
+                        return;
+                    }
+                    String tableName = parts[2];
+                    try {
+                        int rowSize = Integer.parseInt(parts[3]);
+                        database.createTable(tableName, rowSize);
+                        System.out.println("Tabela '" + tableName + "' criada com tamanho de linha " + rowSize + ".");
+                    } catch (NumberFormatException e) {
+                        System.out.println("Erro: O tamanho da linha deve ser um número.");
                     }
                     break;
 
+                case "insert":
+                    String targetTable = parts[1];
+                    if (openTables.containsKey(targetTable)) {
+                        table = openTables.get(targetTable);
+                    } else {
+                        table = database.openTable(targetTable);
+                        openTables.put(targetTable, table);
+                    }
+
+                    int id = Integer.parseInt(parts[2]);
+                    String username = parts[3];
+                    String email = parts[4];
+                    User user = new User(id, username, email);
+
+                    table.insert(user.getId(), user.toBytes());
+                    System.out.println("Inserido na tabela '" + targetTable + "'.");
+                    break;
+
                 case "select":
-                    if (parts.length > 1) {
-                        int key = Integer.parseInt(parts[1]);
-                        Cursor cursor = table.find(key);
-                        if (cursor != null) {
-                            User currentRow = cursor.getValue();
-                            System.out.println("Usuário encontrado: " + currentRow);
-                        } else {
-                            System.out.println("Usuário não encontrado");
-                        }
+                    String tableToSelect = parts[1];
+                    if (openTables.containsKey(tableToSelect)) {
+                        table = openTables.get(tableToSelect);
+                    } else {
+                        table = database.openTable(tableToSelect);
+                        openTables.put(tableToSelect, table);
+                    }
+
+                    byte[] foundBytes = table.find(Integer.parseInt(parts[2]));
+                    if (foundBytes != null) {
+                        User foundUser = User.fromBytes(foundBytes);
+                        System.out.println("Encontrado: " + foundUser);
                     }
 
                     break;

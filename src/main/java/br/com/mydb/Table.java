@@ -1,27 +1,35 @@
 package br.com.mydb;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
+import java.util.Arrays;
 
 public class Table {
 
     private final Pager pager;
     private int rootPageNumber;
+    private int firstDataPageNumber;
+    private final int rowSize;
 
     private final int maxRowsPerPage;
 
     public static final int BTREE_MIN_DEGREE = 3;
     public static final int MAX_KEYS_PER_NODE = 2 * BTREE_MIN_DEGREE - 1;
 
-    public Table(Pager pager, int rootPageNumber) {
+    public Table(Pager pager, int rootPageNumber, int firstDataPageNumber, int rowSize) {
         this.pager = pager;
         this.rootPageNumber = rootPageNumber;
-        this.maxRowsPerPage = (pager.getPageSize() - Page.HEADER_SIZE) / User.ROW_SIZE;
+        this.firstDataPageNumber = firstDataPageNumber;
+        this.rowSize = rowSize;
+        if (rowSize > 0) {
+            this.maxRowsPerPage = (pager.getPageSize() - Page.HEADER_SIZE) / rowSize;
+        } else {
+            this.maxRowsPerPage = 0;
+        }
     }
 
-    public void insert(User user) throws IOException {
-        long dataOffset = writeDataRowAndGetOffset(user);
-        int keyToInsert = user.getId();
+    public void insert(int keyToInsert, byte[] rowData) throws IOException {
+        System.out.println("DEBUG: Table.insert chamado. Chave: " + keyToInsert + ". Tamanho da linha desta tabela: " + this.rowSize);
+        long dataOffset = writeDataRowAndGetOffset(rowData);
 
         Page rootPage = this.pager.getPage(this.rootPageNumber);
         BTreeNode rootNode = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
@@ -115,6 +123,7 @@ public class Table {
         }
 
         node.setKey(slotToInsert, key);
+        System.out.println("DEBUG: [insertIntoLeaf] Inserindo ponteiro " + dataOffset + " para a chave " + key);
         node.setDataPointer(slotToInsert, dataOffset);
         node.setKeyCount(currentKeyCount + 1);
         this.pager.flushPage(node.getPage());
@@ -158,7 +167,7 @@ public class Table {
         int promotedKey = nodeToSplit.getKey(middleIndex);
 
         int j = 0;
-        for (int i = middleIndex + 1; i <= nodeToSplit.getKeyCount(); i++) {
+        for (int i = middleIndex + 1; i < nodeToSplit.getKeyCount(); i++) {
             rightNode.setKey(j, nodeToSplit.getKey(i));
             j++;
         }
@@ -193,7 +202,7 @@ public class Table {
     }
 
 
-    public Cursor find(int key) throws IOException {
+    public byte[] find(int key) throws IOException {
         Page rootPage = this.pager.getPage(this.rootPageNumber);
         BTreeNode node = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
 
@@ -212,7 +221,18 @@ public class Table {
             int midKey = node.getKey(mid);
 
             if (midKey == key) {
-                return new Cursor(this, node.getPageNumber(), mid);
+
+                long dataOffset = node.getDataPointer(mid);
+                int dataPageNumber = (int) (dataOffset / this.pager.getPageSize());
+                int offsetInPage = (int) (dataOffset % this.pager.getPageSize());
+
+                Page dataPage = this.pager.getPage(dataPageNumber);
+                System.out.println("pagina: " + dataPageNumber + "\noffset: " + offsetInPage + "\nbytes lidos " + Arrays.toString(dataPage.getBytes()));
+                byte[] rowData = new byte[this.rowSize];
+                System.arraycopy(dataPage.getBytes(), offsetInPage, rowData, 0, this.rowSize);
+
+                return rowData;
+
             } else if (midKey < key) {
                 left = mid + 1;
             } else {
@@ -235,17 +255,16 @@ public class Table {
         return this.pager.getNumPages();
     }
 
-    private long writeDataRowAndGetOffset(User user) throws IOException {
-        byte[] rowBytes = user.toBytes();
+    private long writeDataRowAndGetOffset(byte[] rowBytes) throws IOException {
         long dataOffset;
 
         Page dataPage = findDataPageWithSpace();
 
         int slotData = dataPage.getRowCount();
-        dataPage.setRow(slotData, rowBytes);
+        dataPage.setRow(slotData, rowBytes, this.rowSize);
         dataPage.setRowCount(slotData + 1);
 
-        long offsetInPage =  Page.HEADER_SIZE + ((long) slotData * User.ROW_SIZE);
+        long offsetInPage =  Page.HEADER_SIZE + ((long) slotData * this.rowSize);
         dataOffset = ((long) dataPage.getPageNumber() * this.pager.getPageSize()) + offsetInPage;
 
         this.pager.flushPage(dataPage);
@@ -254,18 +273,65 @@ public class Table {
     }
 
     private Page findDataPageWithSpace() throws IOException {
-        int numPages = this.pager.getNumPages();
-        for (int i = numPages - 1; i >= 0; i--) {
-            Page candidatePage = this.pager.getPage(i);
-            if (candidatePage.getPageType() == PageType.DATA_PAGE.value) {
-                if (candidatePage.getRowCount() < this.maxRowsPerPage) {
-                    return candidatePage;
-                }
+        int currentPageNum = this.firstDataPageNumber;
+        Page lastPageInChain = null;
+
+        while (currentPageNum != BTreeNode.NULL_POINTER) {
+            Page currentPage = pager.getPage(currentPageNum);
+            lastPageInChain = currentPage;
+
+            if (currentPage.getRowCount() < this.maxRowsPerPage) {
+                return currentPage;
+            }
+            currentPageNum = currentPage.getNextDataPagePointer();
+        }
+
+        Page newPage = pager.newPage();
+        newPage.setPageType(PageType.DATA_PAGE.value);
+        newPage.setRowCount(0);
+        newPage.setNextDataPagePointer(BTreeNode.NULL_POINTER);
+
+        if (lastPageInChain != null) {
+            lastPageInChain.setNextDataPagePointer(newPage.getPageNumber());
+            pager.flushPage(lastPageInChain);
+        } else {
+            this.firstDataPageNumber = newPage.getPageNumber();
+        }
+        pager.flushPage(newPage);
+        return newPage;
+    }
+
+    public long findDataOffset(int key) throws IOException {
+        Page rootPage = this.pager.getPage(this.rootPageNumber);
+        BTreeNode node = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
+
+        while (!node.isLeaf()) {
+            int childIndex = findNextChildIndex(node, key);
+            int childPageNumber = node.getChildPointer(childIndex);
+            Page childPage = this.pager.getPage(childPageNumber);
+            node = new BTreeNode(childPage, BTREE_MIN_DEGREE);
+        }
+
+        int left = 0;
+        int right = node.getKeyCount() - 1;
+        while (left <= right) {
+            int mid = left + (right - left) / 2;
+            int midKey = node.getKey(mid);
+
+            if (midKey == key) {
+                return node.getDataPointer(mid);
+            } else if (midKey < key) {
+                left = mid + 1;
+            } else {
+                right = mid - 1;
             }
         }
-        Page newPage = this.pager.newPage();
-        newPage.setPageType(PageType.DATA_PAGE.value);
-        return newPage;
+
+        return -1L;
+    }
+
+    public int getFirstDataPageNumber() {
+        return this.firstDataPageNumber;
     }
 
     public void printTree() throws IOException {
@@ -310,5 +376,9 @@ public class Table {
 
     public Pager getPager() {
         return pager;
+    }
+
+    public int getRowSize() {
+        return rowSize;
     }
 }
