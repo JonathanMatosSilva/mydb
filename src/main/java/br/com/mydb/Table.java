@@ -1,7 +1,6 @@
 package br.com.mydb;
 
 import java.io.IOException;
-import java.util.Arrays;
 
 public class Table {
 
@@ -28,7 +27,6 @@ public class Table {
     }
 
     public void insert(int keyToInsert, byte[] rowData) throws IOException {
-        System.out.println("DEBUG: Table.insert chamado. Chave: " + keyToInsert + ". Tamanho da linha desta tabela: " + this.rowSize);
         long dataOffset = writeDataRowAndGetOffset(rowData);
 
         Page rootPage = this.pager.getPage(this.rootPageNumber);
@@ -123,7 +121,6 @@ public class Table {
         }
 
         node.setKey(slotToInsert, key);
-        System.out.println("DEBUG: [insertIntoLeaf] Inserindo ponteiro " + dataOffset + " para a chave " + key);
         node.setDataPointer(slotToInsert, dataOffset);
         node.setKeyCount(currentKeyCount + 1);
         this.pager.flushPage(node.getPage());
@@ -227,7 +224,6 @@ public class Table {
                 int offsetInPage = (int) (dataOffset % this.pager.getPageSize());
 
                 Page dataPage = this.pager.getPage(dataPageNumber);
-                System.out.println("pagina: " + dataPageNumber + "\noffset: " + offsetInPage + "\nbytes lidos " + Arrays.toString(dataPage.getBytes()));
                 byte[] rowData = new byte[this.rowSize];
                 System.arraycopy(dataPage.getBytes(), offsetInPage, rowData, 0, this.rowSize);
 

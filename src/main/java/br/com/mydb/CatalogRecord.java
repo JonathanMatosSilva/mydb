@@ -13,7 +13,7 @@ public class CatalogRecord {
 
     private final String tableName;
     private final int rootPageNumber;
-    private final int firstDataPageNumber; // NOVO CAMPO
+    private final int firstDataPageNumber;
     private final int rowSize;
 
     public CatalogRecord(String tableName, int rootPageNumber, int firstDataPageNumber, int rowSize) {

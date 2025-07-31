@@ -2,7 +2,6 @@ package br.com.mydb;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Map;
 
 public class Database {
@@ -40,7 +39,6 @@ public class Database {
         }
 
         CatalogRecord record = CatalogRecord.fromBytes(recordBytes);
-        System.out.println("record lidos " + record.toString() + " tamanho: " + recordBytes.length);
         return new Table(this.pager, record.getRootPageNumber(), record.getFirstDataPageNumber(), record.getRowSize());
     }
 
@@ -91,7 +89,6 @@ public class Database {
         int firstDataPageNum = firstDataPage.getPageNumber();
 
         CatalogRecord record = new CatalogRecord(tableName, newTableRootPageNum, firstDataPageNum, rowSize);
-        System.out.println("bytes escritos " + Arrays.toString(record.toBytes()));
         catalogTable.insert(record.getTableName().hashCode(), record.toBytes());
     }
 
@@ -106,7 +103,7 @@ public class Database {
             String tableName = entry.getKey();
             Table table = entry.getValue();
 
-            System.out.println("Preparando para salvar estado da tabela '" + tableName + "'...");
+            System.out.println("Preparando para salvar estado da tabela '" + tableName);
 
             long offset = this.catalogTable.findDataOffset(tableName.hashCode());
 
@@ -128,6 +125,14 @@ public class Database {
                 System.out.println("-> Estado salvo em memória. Nova raiz: " + finalRootPageNum);
             }
         }
+
+        int catalogRootPageNumber = catalogTable.getRootPageNumber();
+
+        Page headerPage = pager.getPage(0);
+        ByteBuffer buffer = ByteBuffer.wrap(headerPage.getBytes());
+        buffer.putInt(ROOT_PAGE_POINTER_OFFSET, catalogRootPageNumber);
+        headerPage.markAsDirty();
+
         this.pager.close();
     }
 }
