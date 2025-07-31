@@ -7,8 +7,9 @@ public class Page {
     private static final int PAGE_TYPE_OFFSET = 0; // 1 byte
     private static final int ROW_COUNT_OFFSET = 1; // 2 bytes
     public static final int NEXT_SIBLING_POINTER_OFFSET = 3; // 4 bytes
+    public static final int NEXT_DATA_PAGE_POINTER_OFFSET = 7; // 4 bytes
 
-    public static final int HEADER_SIZE = 1 + 2 + 4; // 7 bytes
+    public static final int HEADER_SIZE = 1 + 2 + 4 + 4; // 11 bytes
 
     private final int pageNumber;
     private final byte[] data;
@@ -42,16 +43,16 @@ public class Page {
         this.isDirty = true;
     }
 
-    public byte[] getRow(int slot) {
-        int offset = HEADER_SIZE + (slot * User.ROW_SIZE);
-        byte[] rowData = new byte[User.ROW_SIZE];
-        System.arraycopy(this.data, offset, rowData, 0, User.ROW_SIZE);
+    public byte[] getRow(int slot, int rowSize) {
+        int offset = HEADER_SIZE + (slot * rowSize);
+        byte[] rowData = new byte[rowSize];
+        System.arraycopy(this.data, offset, rowData, 0, rowSize);
         return rowData;
     }
 
-    public void setRow(int slot, byte[] rowData) {
-        int offset = HEADER_SIZE + (slot * User.ROW_SIZE);
-        System.arraycopy(rowData, 0, this.data, offset, User.ROW_SIZE);
+    public void setRow(int slot, byte[] rowData, int rowSize) {
+        int offset = HEADER_SIZE + (slot * rowSize);
+        System.arraycopy(rowData, 0, this.data, offset, rowSize);
     }
 
     public int getPageNumber() {
@@ -67,6 +68,17 @@ public class Page {
     }
 
     public void markAsDirty() {
+        this.isDirty = true;
+    }
+
+    public int getNextDataPagePointer() {
+        ByteBuffer buffer = ByteBuffer.wrap(data);
+        return buffer.getInt(NEXT_DATA_PAGE_POINTER_OFFSET);
+    }
+
+    public void setNextDataPagePointer(int pageNumber) {
+        ByteBuffer buffer = ByteBuffer.wrap(data);
+        buffer.putInt(NEXT_DATA_PAGE_POINTER_OFFSET, pageNumber);
         this.isDirty = true;
     }
 
