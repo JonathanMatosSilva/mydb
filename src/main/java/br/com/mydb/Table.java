@@ -7,9 +7,6 @@ public class Table {
     private final Pager pager;
     private int rootPageNumber;
     private int firstDataPageNumber;
-    private final int rowSize;
-
-    private final int maxRowsPerPage;
 
     public static final int BTREE_MIN_DEGREE = 3;
     public static final int MAX_KEYS_PER_NODE = 2 * BTREE_MIN_DEGREE - 1;
@@ -18,16 +15,10 @@ public class Table {
         this.pager = pager;
         this.rootPageNumber = rootPageNumber;
         this.firstDataPageNumber = firstDataPageNumber;
-        this.rowSize = rowSize;
-        if (rowSize > 0) {
-            this.maxRowsPerPage = (pager.getPageSize() - Page.HEADER_SIZE) / rowSize;
-        } else {
-            this.maxRowsPerPage = 0;
-        }
     }
 
     public void insert(int keyToInsert, byte[] rowData) throws IOException {
-        long dataOffset = writeDataRowAndGetOffset(rowData);
+        long dataPointer = writeRecordAndGetDataPointer(rowData);
 
         Page rootPage = this.pager.getPage(this.rootPageNumber);
         BTreeNode rootNode = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
@@ -55,7 +46,7 @@ public class Table {
 
         }
 
-        insertIntoSubtree(this.rootPageNumber, keyToInsert, dataOffset);
+        insertIntoSubtree(this.rootPageNumber, keyToInsert, dataPointer);
         printTree();
     }
 
@@ -219,15 +210,13 @@ public class Table {
 
             if (midKey == key) {
 
-                long dataOffset = node.getDataPointer(mid);
-                int dataPageNumber = (int) (dataOffset / this.pager.getPageSize());
-                int offsetInPage = (int) (dataOffset % this.pager.getPageSize());
+                long dataPointer = node.getDataPointer(mid);
 
+                int dataPageNumber = (int) (dataPointer >> 32);
+                int dataSlotId = (int) (dataPointer);
                 Page dataPage = this.pager.getPage(dataPageNumber);
-                byte[] rowData = new byte[this.rowSize];
-                System.arraycopy(dataPage.getBytes(), offsetInPage, rowData, 0, this.rowSize);
 
-                return rowData;
+                return dataPage.getRecord(dataSlotId);
 
             } else if (midKey < key) {
                 left = mid + 1;
@@ -251,24 +240,16 @@ public class Table {
         return this.pager.getNumPages();
     }
 
-    private long writeDataRowAndGetOffset(byte[] rowBytes) throws IOException {
-        long dataOffset;
+    private long writeRecordAndGetDataPointer(byte[] recordData) throws IOException {
+        Page dataPage = findDataPageWithSpace(recordData.length);
 
-        Page dataPage = findDataPageWithSpace();
+        long pageNumber = dataPage.getPageNumber();
+        int slotId = dataPage.addRecord(recordData);
 
-        int slotData = dataPage.getRowCount();
-        dataPage.setRow(slotData, rowBytes, this.rowSize);
-        dataPage.setRowCount(slotData + 1);
-
-        long offsetInPage =  Page.HEADER_SIZE + ((long) slotData * this.rowSize);
-        dataOffset = ((long) dataPage.getPageNumber() * this.pager.getPageSize()) + offsetInPage;
-
-        this.pager.flushPage(dataPage);
-
-        return dataOffset;
+        return (pageNumber << 32) | ((long) slotId & 0xFFFFFFFFL);
     }
 
-    private Page findDataPageWithSpace() throws IOException {
+    private Page findDataPageWithSpace(int requiredSpace) throws IOException {
         int currentPageNum = this.firstDataPageNumber;
         Page lastPageInChain = null;
 
@@ -276,16 +257,14 @@ public class Table {
             Page currentPage = pager.getPage(currentPageNum);
             lastPageInChain = currentPage;
 
-            if (currentPage.getRowCount() < this.maxRowsPerPage) {
+            if (currentPage.getFreeSpace() >= requiredSpace) {
                 return currentPage;
             }
             currentPageNum = currentPage.getNextDataPagePointer();
         }
 
         Page newPage = pager.newPage();
-        newPage.setPageType(PageType.DATA_PAGE.value);
-        newPage.setRowCount(0);
-        newPage.setNextDataPagePointer(BTreeNode.NULL_POINTER);
+        newPage.initialize();
 
         if (lastPageInChain != null) {
             lastPageInChain.setNextDataPagePointer(newPage.getPageNumber());
@@ -322,7 +301,6 @@ public class Table {
                 right = mid - 1;
             }
         }
-
         return -1L;
     }
 
@@ -374,7 +352,4 @@ public class Table {
         return pager;
     }
 
-    public int getRowSize() {
-        return rowSize;
-    }
 }

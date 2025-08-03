@@ -16,15 +16,16 @@ public class Cursor {
         this.endOfTable = false;
     }
 
-    public User getValue() throws IOException {
-        Page leafPage = table.getPage(this.pageNumber);
-        BTreeNode leafNode = new BTreeNode(leafPage, Table.BTREE_MIN_DEGREE);
-
-        long dataOffset = leafNode.getDataPointer(this.cellNumber);
-        byte[] rowData = table.getPager().readBytesAt(dataOffset, User.ROW_SIZE);
-
-        return User.fromBytes(rowData);
-    }
+    // REWRITE
+//    public User getValue() throws IOException {
+//        Page leafPage = table.getPage(this.pageNumber);
+//        BTreeNode leafNode = new BTreeNode(leafPage, Table.BTREE_MIN_DEGREE);
+//
+//        long dataOffset = leafNode.getDataPointer(this.cellNumber);
+//        byte[] rowData = table.getPager().readBytesAt(dataOffset, User.ROW_SIZE);
+//
+//        return User.fromBytes(rowData);
+//    }
 
     public void advance() throws IOException {
         if (endOfTable) {

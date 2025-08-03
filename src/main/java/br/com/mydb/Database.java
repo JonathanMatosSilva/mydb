@@ -105,21 +105,27 @@ public class Database {
 
             System.out.println("Preparando para salvar estado da tabela '" + tableName);
 
-            long offset = this.catalogTable.findDataOffset(tableName.hashCode());
+            long dataPointer = this.catalogTable.findDataOffset(tableName.hashCode());
 
-            if (offset != -1L) {
-                int pageNumber = (int) (offset / pager.getPageSize());
-                int offsetInPage = (int) (offset % pager.getPageSize());
+            if (dataPointer != -1L) {
+                int pageNumber = (int) (dataPointer >> 32);
+                int slotId = (int) (dataPointer);
 
                 Page catalogDataPage = pager.getPage(pageNumber);
+                ByteBuffer buffer = ByteBuffer.wrap(catalogDataPage.getBytes());
+
+                int slotArrayOffset = Page.HEADER_SIZE + (slotId * Page.SLOT_SIZE);
+                int recordOffsetInPage = buffer.getShort(slotArrayOffset + Page.SLOT_OFFSET_FIELD);
 
                 int finalRootPageNum = table.getRootPageNumber();
                 int firstDataPageNum = table.getFirstDataPageNumber();
-                int rowSize = table.getRowSize();
+
+                int rowSize = buffer.getShort(slotArrayOffset + Page.SLOT_LENGTH_FIELD);
                 CatalogRecord updatedRecord = new CatalogRecord(tableName, finalRootPageNum, firstDataPageNum, rowSize);
+
                 byte[] updatedBytes = updatedRecord.toBytes();
 
-                System.arraycopy(updatedBytes, 0, catalogDataPage.getBytes(), offsetInPage, updatedBytes.length);
+                System.arraycopy(updatedBytes, 0, catalogDataPage.getBytes(), recordOffsetInPage, updatedBytes.length);
                 catalogDataPage.markAsDirty();
 
                 System.out.println("-> Estado salvo em memória. Nova raiz: " + finalRootPageNum);

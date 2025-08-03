@@ -6,16 +6,6 @@ import java.nio.charset.StandardCharsets;
 
 public class User {
 
-    public static final int ID_SIZE = 4;
-    public static final int USERNAME_SIZE = 32;
-    public static final int EMAIL_SIZE = 255;
-
-    public static final int ID_OFFSET = 0;
-    public static final int USERNAME_OFFSET = ID_OFFSET + ID_SIZE;
-    public static final int EMAIL_OFFSET = USERNAME_OFFSET + USERNAME_SIZE;
-
-    public static final int ROW_SIZE = ID_SIZE + USERNAME_SIZE + EMAIL_SIZE;
-
     private int id;
     private String username;
     private String email;
@@ -53,33 +43,39 @@ public class User {
     }
 
     public byte[] toBytes() {
-        ByteBuffer buffer = ByteBuffer.allocate(User.ROW_SIZE);
-        buffer.order(ByteOrder.nativeOrder());
+        byte[] usernameBytes = username.getBytes(StandardCharsets.UTF_8);
+        byte[] emailBytes = email.getBytes(StandardCharsets.UTF_8);
 
-        buffer.putInt(User.ID_OFFSET, id);
-        buffer.put(User.USERNAME_OFFSET, username.getBytes());
-        buffer.put(User.EMAIL_OFFSET, email.getBytes());
+        int totalSize = 4 + usernameBytes.length + 4 + emailBytes.length + 4;
+        ByteBuffer buffer = ByteBuffer.allocate(totalSize);
+
+        buffer.putInt(usernameBytes.length);
+        buffer.put(usernameBytes);
+
+        buffer.putInt(emailBytes.length);
+        buffer.put(emailBytes);
+
+        buffer.putInt(id);
 
         return buffer.array();
     }
 
     public static User fromBytes(byte[] rowData) {
         ByteBuffer buffer = ByteBuffer.wrap(rowData);
-        buffer.order(ByteOrder.nativeOrder());
 
-        int idLido = buffer.getInt(User.ID_OFFSET);
-
-        byte[] usernameBytes = new byte[User.USERNAME_SIZE];
-        buffer.position(User.USERNAME_OFFSET);
+        int usernameLength = buffer.getInt();
+        byte[] usernameBytes = new byte[usernameLength];
         buffer.get(usernameBytes);
-        String usernameLido = new String(usernameBytes, StandardCharsets.UTF_8).trim();
+        String username = new String(usernameBytes, StandardCharsets.UTF_8);
 
-        byte[] emailBytes = new byte[User.EMAIL_SIZE];
-        buffer.position(User.EMAIL_OFFSET);
+        int emailLength = buffer.getInt();
+        byte[] emailBytes = new byte[emailLength];
         buffer.get(emailBytes);
-        String emailLido = new String(emailBytes, StandardCharsets.UTF_8).trim();
+        String email = new String(emailBytes, StandardCharsets.UTF_8);
 
-        return new User(idLido, usernameLido, emailLido);
+        int id = buffer.getInt();
+
+        return new User(id, username, email);
     }
 
     @Override
