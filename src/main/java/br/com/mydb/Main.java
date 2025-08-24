@@ -129,6 +129,19 @@ public class Main {
 
                     break;
 
+                case "delete":
+                    String tableToDelete = parts[1];
+                    if (openTables.containsKey(tableToDelete)) {
+                        table = openTables.get(tableToDelete);
+                    } else {
+                        table = database.openTable(tableToDelete);
+                        openTables.put(tableToDelete, table);
+                    }
+
+                    table.delete(Integer.parseInt(parts[2]));
+
+                    break;
+
                 default:
                     System.out.println("Comando SQL nao reconhecido: " + command);
                     break;

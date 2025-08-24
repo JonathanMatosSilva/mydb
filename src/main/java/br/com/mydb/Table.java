@@ -10,6 +10,7 @@ public class Table {
 
     public static final int BTREE_MIN_DEGREE = 3;
     public static final int MAX_KEYS_PER_NODE = 2 * BTREE_MIN_DEGREE - 1;
+    public static final int MIN_KEYS_PER_NODE = BTREE_MIN_DEGREE - 1;
 
     public Table(Pager pager, int rootPageNumber, int firstDataPageNumber, int rowSize) {
         this.pager = pager;
@@ -302,6 +303,255 @@ public class Table {
             }
         }
         return -1L;
+    }
+
+    public void delete(int keyToDelete) throws IOException {
+
+        long dataPointer = findDataOffset(keyToDelete);
+        if (dataPointer == -1L) {
+            System.out.println("Chave " + keyToDelete + " não encontrada para exclusão.");
+            return;
+        }
+
+        deleteFromNode(this.rootPageNumber, keyToDelete);
+
+        Page rootPage = pager.getPage(this.rootPageNumber);
+        BTreeNode rootNode = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
+
+        if (!rootNode.isLeaf() && rootNode.getKeyCount() == 0) {
+            System.out.println("RAIZ ANTIGA FICOU VAZIA, ATUALIZANDO PARA NOVA RAIZ...");
+            this.rootPageNumber = rootNode.getChildPointer(0);
+        }
+
+        int dataPageNumber = (int) (dataPointer >> 32);
+        int dataSlotId = (int) (dataPointer);
+
+        Page dataPage = this.pager.getPage(dataPageNumber);
+        dataPage.deleteRecord(dataSlotId);
+
+        System.out.println("Chave " + keyToDelete + " deletada.");
+        printTree();
+    }
+
+    private void deleteFromNode(int pageNumber, int keyToDelete) throws IOException {
+        Page page = pager.getPage(pageNumber);
+        BTreeNode node = new BTreeNode(page, BTREE_MIN_DEGREE);
+
+        if (node.isLeaf()) {
+            deleteFromLeaf(node, keyToDelete);
+            this.pager.flushPage(page);
+            return;
+        }
+
+        int childIndex = findNextChildIndex(node, keyToDelete);
+
+        Page childPage = pager.getPage(node.getChildPointer(childIndex));
+        BTreeNode childNode = new BTreeNode(childPage, BTREE_MIN_DEGREE);
+
+        if (childNode.getKeyCount() == BTREE_MIN_DEGREE - 1) {
+            ensureSufficientKeys(node, childIndex);
+            childIndex = findNextChildIndex(node, keyToDelete);
+        }
+
+        deleteFromNode(node.getChildPointer(childIndex), keyToDelete);
+    }
+
+    private void ensureSufficientKeys(BTreeNode parentNode, int childIndex) throws IOException {
+        Page childPage = pager.getPage(parentNode.getChildPointer(childIndex));
+        BTreeNode childNode = new BTreeNode(childPage, BTREE_MIN_DEGREE);
+
+        if (childIndex > 0) {
+            Page leftPage = pager.getPage(parentNode.getChildPointer(childIndex - 1));
+            BTreeNode leftSibling = new BTreeNode(leftPage, BTREE_MIN_DEGREE);
+
+            if (leftSibling.getKeyCount() > BTREE_MIN_DEGREE - 1) {
+                borrowFromLeftSibling(parentNode, childIndex, childNode, leftSibling);
+                return;
+            }
+        }
+
+        if (childIndex < parentNode.getKeyCount()) {
+            Page rightPage = pager.getPage(parentNode.getChildPointer(childIndex + 1));
+            BTreeNode rightSibling = new BTreeNode(rightPage, BTREE_MIN_DEGREE);
+
+            if (rightSibling.getKeyCount() > BTREE_MIN_DEGREE - 1) {
+                borrowFromRightSibling(parentNode, childIndex, childNode, rightSibling);
+                return;
+            }
+        }
+
+        if (childIndex > 0) {
+            mergeNodes(parentNode, childIndex);
+        } else {
+            mergeNodes(parentNode, childIndex + 1);
+        }
+    }
+
+    private void deleteFromLeaf(BTreeNode node, int keyToDelete) {
+        int index = 0;
+        while (index < node.getKeyCount() && keyToDelete > node.getKey(index)) {
+            index++;
+        }
+
+        if (index < node.getKeyCount() && node.getKey(index) == keyToDelete) {
+            for (int i = index + 1; i < node.getKeyCount(); i++) {
+                node.setKey(i - 1, node.getKey(i));
+                node.setDataPointer(i - 1, node.getDataPointer(i));
+            }
+            node.setKeyCount(node.getKeyCount() - 1);
+
+        }
+    }
+
+    private void borrowFromLeftSibling(BTreeNode parentNode, int childIndexOfDeficitNode, BTreeNode nodeWithDeficit, BTreeNode leftSibling) throws IOException {
+        if (nodeWithDeficit.isLeaf()) {
+
+            int siblingKeyCount = leftSibling.getKeyCount();
+            int keyToMove = leftSibling.getKey(siblingKeyCount - 1);
+            long dataPointerToMove = leftSibling.getDataPointer(siblingKeyCount - 1);
+
+            leftSibling.setKeyCount(siblingKeyCount - 1);
+
+            for (int i = nodeWithDeficit.getKeyCount(); i > 0; i--) {
+                nodeWithDeficit.setKey(i, nodeWithDeficit.getKey(i - 1));
+                nodeWithDeficit.setDataPointer(i, nodeWithDeficit.getDataPointer(i - 1));
+            }
+
+            nodeWithDeficit.setKey(0, keyToMove);
+            nodeWithDeficit.setDataPointer(0, dataPointerToMove);
+            nodeWithDeficit.setKeyCount(nodeWithDeficit.getKeyCount() + 1);
+
+            int parentKeyIndex = childIndexOfDeficitNode - 1;
+            parentNode.setKey(parentKeyIndex, keyToMove);
+
+        } else {
+
+            for (int i = nodeWithDeficit.getKeyCount() - 1; i >= 0; i--) {
+                nodeWithDeficit.setKey(i + 1, nodeWithDeficit.getKey(i));
+            }
+            for (int i = nodeWithDeficit.getKeyCount(); i >= 0; i--) {
+                nodeWithDeficit.setChildPointer(i + 1, nodeWithDeficit.getChildPointer(i));
+            }
+
+            int siblingKeyCount = leftSibling.getKeyCount();
+            int parentKeyIndex = childIndexOfDeficitNode - 1;
+
+            nodeWithDeficit.setKey(0, parentNode.getKey(parentKeyIndex));
+            nodeWithDeficit.setKeyCount(nodeWithDeficit.getKeyCount() + 1);
+
+            int keyToMove = leftSibling.getKey(siblingKeyCount - 1);
+            leftSibling.setKeyCount(siblingKeyCount - 1);
+
+            int childPointerToMove = leftSibling.getChildPointer(siblingKeyCount);
+
+            parentNode.setKey(parentKeyIndex, keyToMove);
+            nodeWithDeficit.setChildPointer(0, childPointerToMove);
+
+        }
+
+        this.pager.flushPage(parentNode.getPage());
+        this.pager.flushPage(nodeWithDeficit.getPage());
+        this.pager.flushPage(leftSibling.getPage());
+    }
+
+    private void borrowFromRightSibling(BTreeNode parentNode, int childIndexOfDeficitNode, BTreeNode nodeWithDeficit, BTreeNode rightSibling) throws IOException {
+        if (nodeWithDeficit.isLeaf()) {
+
+            int keyToMove = rightSibling.getKey(0);
+            long dataPointerToMove = rightSibling.getDataPointer(0);
+
+            int nodeWithDeficitKeyCount = nodeWithDeficit.getKeyCount();
+            nodeWithDeficit.setKey(nodeWithDeficitKeyCount, keyToMove);
+            nodeWithDeficit.setDataPointer(nodeWithDeficitKeyCount, dataPointerToMove);
+            nodeWithDeficit.setKeyCount(nodeWithDeficitKeyCount + 1);
+
+            int siblingKeyCount = rightSibling.getKeyCount();
+            for (int i = 0; i < siblingKeyCount - 1; i++) {
+                rightSibling.setKey(i, rightSibling.getKey(i + 1));
+                rightSibling.setDataPointer(i, rightSibling.getDataPointer(i + 1));
+            }
+            rightSibling.setKeyCount(siblingKeyCount - 1);
+
+            parentNode.setKey(childIndexOfDeficitNode, rightSibling.getKey(0));
+
+        } else {
+
+            int siblingKeyCount = rightSibling.getKeyCount();
+
+            int nodeWithDeficitKeyCount = nodeWithDeficit.getKeyCount();
+            nodeWithDeficit.setKey(nodeWithDeficitKeyCount, parentNode.getKey(childIndexOfDeficitNode));
+            nodeWithDeficit.setKeyCount(nodeWithDeficitKeyCount + 1);
+
+            int keyToMove = rightSibling.getKey(0);
+            int childPointerToMove = rightSibling.getChildPointer(0);
+
+            for (int i = 0; i < siblingKeyCount - 1; i++) {
+                rightSibling.setKey(i, rightSibling.getKey(i + 1));
+            }
+            for (int i = 0; i < siblingKeyCount; i++) {
+                rightSibling.setChildPointer(i, rightSibling.getChildPointer(i + 1));
+            }
+            rightSibling.setKeyCount(siblingKeyCount - 1);
+
+            parentNode.setKey(childIndexOfDeficitNode, keyToMove);
+            nodeWithDeficit.setChildPointer(nodeWithDeficit.getKeyCount(), childPointerToMove);
+
+        }
+
+        this.pager.flushPage(parentNode.getPage());
+        this.pager.flushPage(nodeWithDeficit.getPage());
+        this.pager.flushPage(rightSibling.getPage());
+    }
+
+    private void mergeNodes(BTreeNode parentNode, int rightNodeIndex) throws IOException {
+        int leftNodeIndex = rightNodeIndex - 1;
+
+        BTreeNode leftNode = new BTreeNode(pager.getPage(parentNode.getChildPointer(leftNodeIndex)), BTREE_MIN_DEGREE);
+        BTreeNode rightNode = new BTreeNode(pager.getPage(parentNode.getChildPointer(rightNodeIndex)), BTREE_MIN_DEGREE);
+
+        if (rightNode.isLeaf()) {
+
+            int leftNodeKeyCount = leftNode.getKeyCount();
+            int rightNodeKeyCount = rightNode.getKeyCount();
+
+            for (int i = 0; i < rightNodeKeyCount; i++) {
+                leftNode.setKey(leftNodeKeyCount + i, rightNode.getKey(i));
+                leftNode.setDataPointer(leftNodeKeyCount + i, rightNode.getDataPointer(i));
+            }
+            leftNode.setKeyCount(leftNodeKeyCount + rightNodeKeyCount);
+            leftNode.setNextSiblingPointer(rightNode.getNextSiblingPointer());
+
+        } else {
+
+            int rightNodeKeyCount = rightNode.getKeyCount();
+            int leftNodeKeyCount = leftNode.getKeyCount();
+
+            int parentKeyToMove = parentNode.getKey(rightNodeIndex - 1);
+            leftNode.setKey(leftNode.getKeyCount(), parentKeyToMove);
+            leftNodeKeyCount += 1;
+
+            for (int i = 0; i < rightNodeKeyCount; i++) {
+                leftNode.setKey(leftNodeKeyCount + i, rightNode.getKey(i));
+            }
+            for (int i = 0; i <= rightNodeKeyCount; i++) {
+                leftNode.setChildPointer(leftNodeKeyCount + i, rightNode.getChildPointer(i));
+            }
+
+            leftNode.setKeyCount(leftNodeKeyCount + rightNode.getKeyCount());
+        }
+
+        int parentKeyToRemoveIndex = rightNodeIndex - 1;
+        int parentNodeKeyCount = parentNode.getKeyCount();
+        for (int i = parentKeyToRemoveIndex; i < parentNodeKeyCount - 1; i++) {
+            parentNode.setKey(i, parentNode.getKey(i + 1));
+        }
+        for (int i = rightNodeIndex; i < parentNodeKeyCount; i++) {
+            parentNode.setChildPointer(i, parentNode.getChildPointer(i + 1));
+        }
+        parentNode.setKeyCount(parentNodeKeyCount - 1);
+
+        this.pager.flushPage(parentNode.getPage());
+        this.pager.flushPage(leftNode.getPage());
     }
 
     public int getFirstDataPageNumber() {

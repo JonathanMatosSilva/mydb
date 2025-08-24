@@ -132,4 +132,15 @@ public class Page {
 
         return record;
     }
+
+    public void deleteRecord(int slotId) {
+        if (slotId < 0 || slotId > getRowCount()) {
+            throw new NoSuchElementException("Slot ID " + slotId + " é inválido para a página " + pageNumber);
+        }
+
+        int slotOffset = HEADER_SIZE + (slotId * SLOT_SIZE);
+
+        this.buffer.putShort(slotOffset + SLOT_LENGTH_FIELD, (short) 0);
+        markAsDirty();
+    }
 }
