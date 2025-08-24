@@ -99,7 +99,6 @@ public class Main {
             }
         } catch (Exception e) {
             System.out.println("Erro ao executar comando: " + e.getMessage());
-            // e.printStackTrace(); // Descomente para depuração
         }
     }
 
@@ -131,7 +130,6 @@ public class Main {
     }
 
     private static void handleInsert(String statement) throws IOException {
-        // Ex: into usuarios values (1, 'João Silva')
         String[] parts = statement.split("values");
         String tableName = parts[0].replace("into", "").trim();
         String valuesPart = parts[1].trim();
@@ -151,7 +149,7 @@ public class Main {
 
         for (int i = 0; i < schema.size(); i++) {
             Column col = schema.get(i);
-            String valStr = values[i].trim().replace("'", ""); // Remove aspas simples
+            String valStr = values[i].trim().replace("'", "");
 
             Object value;
             if (col.type() == DataType.INTEGER) {
@@ -177,16 +175,35 @@ public class Main {
 
     private static void handleSelect(String statement) throws IOException {
         String[] parts = statement.trim().split("\\s+");
-        String tableName = parts[1];
-        int key = Integer.parseInt(parts[2]);
 
-        Table table = getTable(tableName);
-        Row foundRow = table.find(key);
+        if (parts[0].equals("*") && parts[1].equals("from")) {
+            String tableName = parts[2];
+            Table table = getTable(tableName);
+            Cursor cursor = table.start();
 
-        if (foundRow != null) {
-            System.out.println("Encontrado: " + foundRow);
+            int rowCount = 0;
+            System.out.println("--- Resultado da Tabela '" + tableName + "' ---");
+            while (!cursor.isEndOfTable()) {
+                Row row = cursor.getRecord();
+                System.out.println(row);
+                rowCount++;
+                cursor.advance();
+            }
+            System.out.println("--- " + rowCount + " linha(s) ---");
+        } else if (parts[0].equals("from")) {
+            String tableName = parts[1];
+            int key = Integer.parseInt(parts[2]);
+
+            Table table = getTable(tableName);
+            Row foundRow = table.find(key);
+
+            if (foundRow != null) {
+                System.out.println("Encontrado: " + foundRow);
+            } else {
+                System.out.println("Chave " + key + " não encontrada na tabela '" + tableName + "'.");
+            }
         } else {
-            System.out.println("Chave " + key + " não encontrada na tabela '" + tableName + "'.");
+            System.out.println("Sintaxe de SELECT inválida. Use: select * from <tabela>; ou select from <tabela> <chave>;");
         }
     }
 
