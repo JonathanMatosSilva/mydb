@@ -1,25 +1,29 @@
 package br.com.mydb;
 
 import java.io.IOException;
+import java.util.List;
 
 public class Table {
 
     private final Pager pager;
     private int rootPageNumber;
     private int firstDataPageNumber;
+    private final List<Column> schema;
 
     public static final int BTREE_MIN_DEGREE = 3;
     public static final int MAX_KEYS_PER_NODE = 2 * BTREE_MIN_DEGREE - 1;
     public static final int MIN_KEYS_PER_NODE = BTREE_MIN_DEGREE - 1;
 
-    public Table(Pager pager, int rootPageNumber, int firstDataPageNumber, int rowSize) {
+    public Table(Pager pager, int rootPageNumber, int firstDataPageNumber, List<Column> schema) {
         this.pager = pager;
         this.rootPageNumber = rootPageNumber;
         this.firstDataPageNumber = firstDataPageNumber;
+        this.schema = schema;
     }
 
-    public void insert(int keyToInsert, byte[] rowData) throws IOException {
-        long dataPointer = writeRecordAndGetDataPointer(rowData);
+    public void insert(int keyToInsert, Row rowData) throws IOException {
+        byte[] serializedRow = RowSerializer.serialize(rowData, this.schema);
+        long dataPointer = writeRecordAndGetDataPointer(serializedRow);
 
         Page rootPage = this.pager.getPage(this.rootPageNumber);
         BTreeNode rootNode = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
@@ -190,8 +194,15 @@ public class Table {
         this.pager.flushPage(parentNode.getPage());
     }
 
+    public Row find(int key) throws IOException {
+        byte[] recordBytes = findRaw(key);
+        if (recordBytes == null) {
+            return null;
+        }
+        return RowSerializer.deserialize(recordBytes, this.schema);
+    }
 
-    public byte[] find(int key) throws IOException {
+    public byte[] findRaw(int key) throws IOException {
         Page rootPage = this.pager.getPage(this.rootPageNumber);
         BTreeNode node = new BTreeNode(rootPage, BTREE_MIN_DEGREE);
 
@@ -228,8 +239,27 @@ public class Table {
         return null;
     }
 
-    public Cursor start() {
-        return new Cursor(this, 0, 0);
+    public Cursor start() throws IOException {
+        int firstLeafPageNum = findFirstLeafPageNumber();
+        return new Cursor(this, firstLeafPageNum);
+    }
+
+    private int findFirstLeafPageNumber() throws IOException {
+        int currentPageNum = this.rootPageNumber;
+        Page currentPage = this.pager.getPage(currentPageNum);
+        BTreeNode node = new BTreeNode(currentPage, BTREE_MIN_DEGREE);
+
+        if (node.isLeaf()) {
+            return currentPageNum;
+        }
+
+        while (!node.isLeaf()) {
+            currentPageNum = node.getChildPointer(0);
+            currentPage = this.pager.getPage(currentPageNum);
+            node = new BTreeNode(currentPage, BTREE_MIN_DEGREE);
+        }
+
+        return currentPageNum;
     }
 
 
@@ -265,7 +295,7 @@ public class Table {
         }
 
         Page newPage = pager.newPage();
-        newPage.initialize();
+        newPage.initializeAsDataPage();
 
         if (lastPageInChain != null) {
             lastPageInChain.setNextDataPagePointer(newPage.getPageNumber());
@@ -348,7 +378,7 @@ public class Table {
         Page childPage = pager.getPage(node.getChildPointer(childIndex));
         BTreeNode childNode = new BTreeNode(childPage, BTREE_MIN_DEGREE);
 
-        if (childNode.getKeyCount() == BTREE_MIN_DEGREE - 1) {
+        if (childNode.getKeyCount() == MIN_KEYS_PER_NODE) {
             ensureSufficientKeys(node, childIndex);
             childIndex = findNextChildIndex(node, keyToDelete);
         }
@@ -554,6 +584,21 @@ public class Table {
         this.pager.flushPage(leftNode.getPage());
     }
 
+    public boolean update(int keyToUpdate, Row newRowData) throws IOException {
+        long dataPointer = findDataOffset(keyToUpdate);
+
+        if (dataPointer == -1L) {
+            System.out.println("Chave " + keyToUpdate + " não encontrada para atualização.");
+            return false;
+        }
+
+        delete(keyToUpdate);
+        insert(keyToUpdate, newRowData);
+
+        System.out.println("Chave " + keyToUpdate + " atualizada com sucesso.");
+        return true;
+    }
+
     public int getFirstDataPageNumber() {
         return this.firstDataPageNumber;
     }
@@ -602,4 +647,7 @@ public class Table {
         return pager;
     }
 
+    public List<Column> getSchema() {
+        return schema;
+    }
 }

@@ -79,13 +79,6 @@ public class Page {
         this.buffer.putInt(NEXT_DATA_PAGE_POINTER_OFFSET, pageNumber);
     }
 
-    public void initialize() {
-        setPageType(PageType.DATA_PAGE.value);
-        setRowCount(0);
-        setFreeSpacePointer(this.data.length);
-        setNextDataPagePointer(BTreeNode.NULL_POINTER);
-    }
-
     public int getFreeSpace() {
         int endOfSlotArray = HEADER_SIZE + (SLOT_SIZE * getRowCount());
         return getFreeSpacePointer() - endOfSlotArray;
@@ -142,5 +135,21 @@ public class Page {
 
         this.buffer.putShort(slotOffset + SLOT_LENGTH_FIELD, (short) 0);
         markAsDirty();
+    }
+
+    public Page initializeAsLeaf() {
+        setPageType(PageType.BTREE_LEAF_NODE.value);
+        BTreeNode node = new BTreeNode(this, Table.BTREE_MIN_DEGREE);
+        node.setKeyCount(0);
+        node.setNextSiblingPointer(BTreeNode.NULL_POINTER);
+        return this;
+    }
+
+    public Page initializeAsDataPage() {
+        setPageType(PageType.DATA_PAGE.value);
+        setRowCount(0);
+        setFreeSpacePointer(this.data.length);
+        setNextDataPagePointer(BTreeNode.NULL_POINTER);
+        return this;
     }
 }

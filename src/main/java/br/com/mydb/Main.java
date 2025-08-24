@@ -1,16 +1,14 @@
 package br.com.mydb;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Scanner;
+import java.util.*;
 
 public class Main {
 
     private static Database database;
-    private static Map<String, Table> openTables = new HashMap<>();
+    private static final Map<String, Table> openTables = new HashMap<>();
 
-    public static void main(String[] args) throws IOException {
+    public static void main(String[] args) {
         if (args.length == 0) {
             System.out.println("Erro: Forneça o nome do arquivo de banco de dados como argumento.");
             System.exit(1);
@@ -18,46 +16,44 @@ public class Main {
         String databaseFilename = args[0];
         System.out.println("Usando o arquivo de banco de dados: " + databaseFilename);
 
-        database = new Database(databaseFilename);
+        try {
+            database = new Database(databaseFilename);
+            Scanner scanner = new Scanner(System.in);
+            System.out.println("Bem-vindo ao mydb. Digite .exit para sair.");
 
-        Scanner scanner = new Scanner(System.in);
+            while (true) {
+                printPrompt();
+                scanner.useDelimiter(";");
+                String input = scanner.next().trim();
 
-        while (true) {
-            printPrompt();
-            scanner.useDelimiter(";");
-            String input = scanner.next().trim();
-
-            if (input.isEmpty()) {
-                continue;
-            }
-
-            if (input.startsWith(".")) {
-                if (handleMetaCommand(input)) {
-                    database.close(openTables);
-                    break;
+                if (input.isEmpty()) {
+                    continue;
                 }
-                continue;
+
+                if (input.startsWith(".")) {
+                    if (handleMetaCommand(input)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                handleStatement(input);
             }
 
-            handleStatement(input);
-        }
+            scanner.close();
+            database.close(openTables);
+            System.out.println("Até logo!");
 
-        scanner.close();
-        System.out.println("Ate logo!");
+        } catch (IOException e) {
+            System.err.println("Erro de IO no banco de dados: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
-    /**
-     * Imprime o prompt do banco de dados.
-     */
     private static void printPrompt() {
         System.out.print("db > ");
     }
 
-    /**
-     * Processa meta-comandos (comandos que começam com '.').
-     * @param input O comando digitado pelo usuário.
-     * @return Retorna 'true' se o comando for para sair, 'false' caso contrário.
-     */
     private static boolean handleMetaCommand(String input) {
         if (input.equals(".exit")) {
             return true;
@@ -67,84 +63,174 @@ public class Main {
         }
     }
 
-    /**
-     * Processa comandos SQL (ou similares).
-     * @param input O comando digitado pelo usuário.
-     */
+    private static Table getTable(String tableName) throws IOException {
+        if (openTables.containsKey(tableName)) {
+            return openTables.get(tableName);
+        }
+        Table table = database.openTable(tableName);
+        openTables.put(tableName, table);
+        return table;
+    }
+
     private static void handleStatement(String input) throws IOException {
+        String[] parts = input.split("\\s+", 2);
+        String command = parts[0].toLowerCase();
 
-            String[] parts = input.split(" ");
-            String command = parts[0].toLowerCase();
-
-            Table table;
-
+        try {
             switch (command) {
                 case "create":
-                    if (parts.length != 4 || !parts[1].equals("table")) {
-                        System.out.println("Comando inválido. Use: create table <nome> <tamanho_linha>");
-                        return;
-                    }
-                    String tableName = parts[2];
-                    try {
-                        int rowSize = Integer.parseInt(parts[3]);
-                        database.createTable(tableName, rowSize);
-                        System.out.println("Tabela '" + tableName + "' criada com tamanho de linha " + rowSize + ".");
-                    } catch (NumberFormatException e) {
-                        System.out.println("Erro: O tamanho da linha deve ser um número.");
-                    }
+                    handleCreateTable(parts[1]);
                     break;
-
                 case "insert":
-                    String targetTable = parts[1];
-                    if (openTables.containsKey(targetTable)) {
-                        table = openTables.get(targetTable);
-                    } else {
-                        table = database.openTable(targetTable);
-                        openTables.put(targetTable, table);
-                    }
-
-                    int id = Integer.parseInt(parts[2]);
-                    String username = parts[3];
-                    String email = parts[4];
-                    User user = new User(id, username, email);
-
-                    table.insert(user.getId(), user.toBytes());
-                    System.out.println("Inserido na tabela '" + targetTable + "'.");
+                    handleInsert(parts[1]);
                     break;
-
                 case "select":
-                    String tableToSelect = parts[1];
-                    if (openTables.containsKey(tableToSelect)) {
-                        table = openTables.get(tableToSelect);
-                    } else {
-                        table = database.openTable(tableToSelect);
-                        openTables.put(tableToSelect, table);
-                    }
-
-                    byte[] foundBytes = table.find(Integer.parseInt(parts[2]));
-                    if (foundBytes != null) {
-                        User foundUser = User.fromBytes(foundBytes);
-                        System.out.println("Encontrado: " + foundUser);
-                    }
-
+                    handleSelect(parts[1]);
                     break;
-
                 case "delete":
-                    String tableToDelete = parts[1];
-                    if (openTables.containsKey(tableToDelete)) {
-                        table = openTables.get(tableToDelete);
-                    } else {
-                        table = database.openTable(tableToDelete);
-                        openTables.put(tableToDelete, table);
-                    }
-
-                    table.delete(Integer.parseInt(parts[2]));
-
+                    handleDelete(parts[1]);
                     break;
-
+                case "update":
+                    handleUpdate(parts[1]);
+                    break;
                 default:
-                    System.out.println("Comando SQL nao reconhecido: " + command);
+                    System.out.println("Comando SQL não reconhecido: " + command);
                     break;
             }
+        } catch (Exception e) {
+            System.out.println("Erro ao executar comando: " + e.getMessage());
+            // e.printStackTrace(); // Descomente para depuração
+        }
+    }
+
+    private static void handleCreateTable(String statement) throws IOException {
+        statement = statement.replace("table", "").trim();
+        int openParen = statement.indexOf('(');
+        int closeParen = statement.lastIndexOf(')');
+
+        if (openParen == -1 || closeParen == -1) {
+            System.out.println("Sintaxe inválida. Use: create table <nome> (<col1> <tipo1>, ...);");
+            return;
+        }
+
+        String tableName = statement.substring(0, openParen).trim();
+        String colsPart = statement.substring(openParen + 1, closeParen).trim();
+        String[] colDefs = colsPart.split(",");
+
+        List<Column> schema = new ArrayList<>();
+        int ordinalPosition = 1;
+        for (String def : colDefs) {
+            String[] parts = def.trim().split("\\s+");
+            String colName = parts[0];
+            String colType = parts[1].toUpperCase();
+            DataType dataType = (colType.equals("INT")) ? DataType.INTEGER : DataType.VARCHAR;
+            schema.add(new Column(colName, dataType, ordinalPosition++));
+        }
+
+        database.createTable(tableName, schema);
+    }
+
+    private static void handleInsert(String statement) throws IOException {
+        // Ex: into usuarios values (1, 'João Silva')
+        String[] parts = statement.split("values");
+        String tableName = parts[0].replace("into", "").trim();
+        String valuesPart = parts[1].trim();
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1); // Remove parênteses
+        String[] values = valuesPart.split(",");
+
+        Table table = getTable(tableName);
+        List<Column> schema = table.getSchema();
+
+        if (values.length != schema.size()) {
+            System.out.println("Erro: O número de valores não corresponde ao número de colunas.");
+            return;
+        }
+
+        Row newRow = new Row();
+        int primaryKey = -1;
+
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            String valStr = values[i].trim().replace("'", ""); // Remove aspas simples
+
+            Object value;
+            if (col.type() == DataType.INTEGER) {
+                value = Integer.parseInt(valStr);
+            } else {
+                value = valStr;
+            }
+            newRow.put(col.name(), value);
+
+            if (col.ordinalPosition() == 1) { // Assume que a primeira coluna é a chave primária
+                primaryKey = (Integer) value;
+            }
+        }
+
+        if (primaryKey == -1) {
+            System.out.println("Erro: Chave primária não encontrada ou não é a primeira coluna.");
+            return;
+        }
+
+        table.insert(primaryKey, newRow);
+        System.out.println("Inserido na tabela '" + tableName + "'.");
+    }
+
+    private static void handleSelect(String statement) throws IOException {
+        String[] parts = statement.trim().split("\\s+");
+        String tableName = parts[1];
+        int key = Integer.parseInt(parts[2]);
+
+        Table table = getTable(tableName);
+        Row foundRow = table.find(key);
+
+        if (foundRow != null) {
+            System.out.println("Encontrado: " + foundRow);
+        } else {
+            System.out.println("Chave " + key + " não encontrada na tabela '" + tableName + "'.");
+        }
+    }
+
+    private static void handleDelete(String statement) throws IOException {
+        // Ex: from usuarios 1
+        String[] parts = statement.trim().split("\\s+");
+        String tableName = parts[1];
+        int key = Integer.parseInt(parts[2]);
+
+        Table table = getTable(tableName);
+        table.delete(key);
+    }
+
+    private static void handleUpdate(String statement) throws IOException {
+        String[] parts = statement.split("set");
+        String tableName = parts[0].trim();
+        String valuesPart = parts[1].trim();
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1); // Remove parênteses
+        String[] values = valuesPart.split(",");
+
+        Table table = getTable(tableName);
+        List<Column> schema = table.getSchema();
+
+        if (values.length != schema.size()) {
+            System.out.println("Erro: O número de valores não corresponde ao número de colunas.");
+            return;
+        }
+
+        Row updatedRow = new Row();
+        int primaryKey = Integer.parseInt(values[0].trim());
+
+        for (int i = 0; i < schema.size(); i++) {
+            Column col = schema.get(i);
+            String valStr = values[i].trim().replace("'", "");
+
+            Object value;
+            if (col.type() == DataType.INTEGER) {
+                value = Integer.parseInt(valStr);
+            } else {
+                value = valStr;
+            }
+            updatedRow.put(col.name(), value);
+        }
+
+        table.update(primaryKey, updatedRow);
     }
 }
