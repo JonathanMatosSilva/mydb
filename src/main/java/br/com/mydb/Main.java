@@ -179,17 +179,19 @@ public class Main {
         if (parts[0].equals("*") && parts[1].equals("from")) {
             String tableName = parts[2];
             Table table = getTable(tableName);
-            Cursor cursor = table.start();
 
-            int rowCount = 0;
-            System.out.println("--- Resultado da Tabela '" + tableName + "' ---");
+            List<Row> results = new ArrayList<>();
+            Cursor cursor = table.start();
             while (!cursor.isEndOfTable()) {
-                Row row = cursor.getRecord();
-                System.out.println(row);
-                rowCount++;
+                results.add(cursor.getRecord());
                 cursor.advance();
             }
-            System.out.println("--- " + rowCount + " linha(s) ---");
+
+            if (results.isEmpty()) {
+                System.out.println("Tabela '" + tableName + "' está vazia ou não contém registros.");
+            } else {
+                TableFormatter.printTable(table.getSchema(), results);
+            }
         } else if (parts[0].equals("from")) {
             String tableName = parts[1];
             int key = Integer.parseInt(parts[2]);
@@ -198,10 +200,11 @@ public class Main {
             Row foundRow = table.find(key);
 
             if (foundRow != null) {
-                System.out.println("Encontrado: " + foundRow);
+                TableFormatter.printTable(table.getSchema(), Collections.singletonList(foundRow));
             } else {
                 System.out.println("Chave " + key + " não encontrada na tabela '" + tableName + "'.");
             }
+
         } else {
             System.out.println("Sintaxe de SELECT inválida. Use: select * from <tabela>; ou select from <tabela> <chave>;");
         }
