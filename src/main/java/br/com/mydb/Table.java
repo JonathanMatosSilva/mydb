@@ -22,6 +22,12 @@ public class Table {
     }
 
     public void insert(int keyToInsert, Row rowData) throws IOException {
+        Row row = find(keyToInsert);
+
+        if (row != null) {
+            throw new IllegalArgumentException("Chave primária '" + keyToInsert + "' violada.");
+        }
+
         byte[] serializedRow = RowSerializer.serialize(rowData, this.schema);
         long dataPointer = writeRecordAndGetDataPointer(serializedRow);
 

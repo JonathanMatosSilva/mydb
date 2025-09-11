@@ -35,6 +35,14 @@ public class Database {
         COLUMNS_CATALOG_SCHEMA = Collections.unmodifiableList(schema);
     }
 
+    private static final List<Column> USERS_TABLE_SCHEMA;
+    static {
+        List<Column> schema = new ArrayList<>();
+        schema.add(new Column("username", DataType.VARCHAR, 1));
+        schema.add(new Column("password", DataType.VARCHAR, 2));
+        USERS_TABLE_SCHEMA = Collections.unmodifiableList(schema);
+    }
+
     public Database(String databaseFilePath) throws IOException {
         this.pager = new Pager(databaseFilePath, 4096);
 
@@ -112,6 +120,8 @@ public class Database {
 
         this.tablesCatalog = new Table(pager, tablesRootPage.getPageNumber(), tablesDataPage.getPageNumber(), TABLES_CATALOG_SCHEMA);
         this.columnsCatalog = new Table(pager, columnsRootPage.getPageNumber(), columnsDataPage.getPageNumber(), COLUMNS_CATALOG_SCHEMA);
+
+        createUsersTableAndDefaultAdmin();
     }
 
     public void createTable(String tableName, List<Column> schema) throws IOException {
@@ -175,5 +185,21 @@ public class Database {
 
         this.pager.close();
         System.out.println("Banco de dados fechado com sucesso.");
+    }
+
+    private void createUsersTableAndDefaultAdmin() throws IOException {
+        String tableName = "db_users";
+        createTable(tableName, USERS_TABLE_SCHEMA);
+        Table usersTable = openTable(tableName);
+
+        String username = "admin";
+        String password = "admin";
+
+        String hashedPassword = Util.hashPassword(password, username);
+
+        Row adminRow = new Row();
+        adminRow.put("username", username);
+        adminRow.put("password", hashedPassword);
+        usersTable.insert(username.hashCode(), adminRow);
     }
 }

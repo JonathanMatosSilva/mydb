@@ -21,23 +21,25 @@ public class Main {
             Scanner scanner = new Scanner(System.in);
             System.out.println("Bem-vindo ao mydb. Digite .exit para sair.");
 
-            while (true) {
-                printPrompt();
-                scanner.useDelimiter(";");
-                String input = scanner.next().trim();
+            if (handleLogin(scanner)) {
+                while (true) {
+                    printPrompt();
+                    scanner.useDelimiter(";");
+                    String input = scanner.next().trim();
 
-                if (input.isEmpty()) {
-                    continue;
-                }
-
-                if (input.startsWith(".")) {
-                    if (handleMetaCommand(input)) {
-                        break;
+                    if (input.isEmpty()) {
+                        continue;
                     }
-                    continue;
-                }
 
-                handleStatement(input);
+                    if (input.startsWith(".")) {
+                        if (handleMetaCommand(input)) {
+                            break;
+                        }
+                        continue;
+                    }
+
+                    handleStatement(input);
+                }
             }
 
             scanner.close();
@@ -47,6 +49,37 @@ public class Main {
         } catch (IOException e) {
             System.err.println("Erro de IO no banco de dados: " + e.getMessage());
             e.printStackTrace();
+        }
+    }
+
+    private static boolean handleLogin(Scanner scanner) throws IOException {
+        System.out.print("Usuário: ");
+        String username = scanner.nextLine().trim();
+
+        System.out.print("Senha: ");
+        String password = scanner.nextLine().trim();
+
+        try {
+            Table usersTable = database.openTable("db_users");
+            Row userRow = usersTable.find(username.hashCode());
+
+            if (userRow == null) {
+                System.out.println("Usuário não encontrado.");
+                return false;
+            }
+            String storedHash = (String) userRow.get("password");
+            String enteredPasswordHash = Util.hashPassword(password, username);
+
+            if (storedHash.equals(enteredPasswordHash)) {
+                return true;
+            } else {
+                System.out.println("Senha incorreta.");
+                return false;
+            }
+
+        } catch (IOException e) {
+            System.out.println("Erro crítico: Tabela de usuários não encontrada. O banco pode estar corrompido.");
+            return false;
         }
     }
 
@@ -159,7 +192,7 @@ public class Main {
             }
             newRow.put(col.name(), value);
 
-            if (col.ordinalPosition() == 1) { // Assume que a primeira coluna é a chave primária
+            if (col.ordinalPosition() == 1) {
                 primaryKey = (Integer) value;
             }
         }
