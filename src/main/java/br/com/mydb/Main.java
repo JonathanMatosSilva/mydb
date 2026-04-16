@@ -166,7 +166,7 @@ public class Main {
         String[] parts = statement.split("values");
         String tableName = parts[0].replace("into", "").trim();
         String valuesPart = parts[1].trim();
-        valuesPart = valuesPart.substring(1, valuesPart.length() - 1); // Remove parênteses
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1);
         String[] values = valuesPart.split(",");
 
         Table table = getTable(tableName);

@@ -68,7 +68,8 @@ public class Database {
         }
         List<Column> schema = loadSchema(tableName);
 
-        return new Table(this.pager, (Integer) row.get("rootPageNumber"), (Integer) row.get("firstDataPageNumber"), schema);
+        return new Table(this.pager, (Integer) row.get("rootPageNumber"), (Integer) row.get("firstDataPageNumber"),
+                schema);
     }
 
     private List<Column> loadSchema(String tableName) throws IOException {
@@ -89,8 +90,7 @@ public class Database {
                 schema.add(new Column(
                         columnName,
                         DataType.fromId(dataTypeId),
-                        ordinalPosition
-                ));
+                        ordinalPosition));
             }
             cursor.advance();
         }
@@ -118,10 +118,32 @@ public class Database {
         headerBuffer.putInt(COLUMNS_CATALOG_ROOT_OFFSET, columnsRootPage.getPageNumber());
         pager.flushPage(headerPage);
 
-        this.tablesCatalog = new Table(pager, tablesRootPage.getPageNumber(), tablesDataPage.getPageNumber(), TABLES_CATALOG_SCHEMA);
-        this.columnsCatalog = new Table(pager, columnsRootPage.getPageNumber(), columnsDataPage.getPageNumber(), COLUMNS_CATALOG_SCHEMA);
+        this.tablesCatalog = new Table(pager, tablesRootPage.getPageNumber(), tablesDataPage.getPageNumber(),
+                TABLES_CATALOG_SCHEMA);
+        this.columnsCatalog = new Table(pager, columnsRootPage.getPageNumber(), columnsDataPage.getPageNumber(),
+                COLUMNS_CATALOG_SCHEMA);
 
         createUsersTableAndDefaultAdmin();
+
+        String tableName = "all_tables";
+        int tableKey = tableName.hashCode();
+
+        Row tableInfoRow = new Row();
+        tableInfoRow.put("tableName", tableName);
+        tableInfoRow.put("rootPageNumber", tablesRootPage.getPageNumber());
+        tableInfoRow.put("firstDataPageNumber", tablesDataPage.getPageNumber());
+        this.tablesCatalog.insert(tableKey, tableInfoRow);
+        for (Column col : TABLES_CATALOG_SCHEMA) {
+            int colKey = (tableName + "." + col.name()).hashCode();
+
+            Row columnInfoRow = new Row();
+            columnInfoRow.put("tableHash", tableKey);
+            columnInfoRow.put("columnName", col.name());
+            columnInfoRow.put("dataTypeId", col.type().id);
+            columnInfoRow.put("ordinalPosition", col.ordinalPosition());
+
+            columnsCatalog.insert(colKey, columnInfoRow);
+        }
     }
 
     public void createTable(String tableName, List<Column> schema) throws IOException {
