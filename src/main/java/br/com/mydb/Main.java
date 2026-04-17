@@ -1,45 +1,47 @@
 package br.com.mydb;
 
+import java.awt.BorderLayout;
+import java.awt.AWTError;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.GraphicsEnvironment;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
+import java.awt.Insets;
+import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.*;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JPasswordField;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 
 public class Main {
 
+    private static final String DB_PADRAO = "mydb.bd";
     private static Database database;
     private static final Map<String, Table> openTables = new HashMap<>();
 
     public static void main(String[] args) {
-        if (args.length == 0) {
-            System.out.println("Erro: Forneça o nome do arquivo de banco de dados como argumento.");
-            System.exit(1);
-        }
-        String databaseFilename = args[0];
-        System.out.println("Usando o arquivo de banco de dados: " + databaseFilename);
+        String arquivoDb = pegarArquivoDb(args);
+        System.out.println("Usando o arquivo de banco de dados: " + arquivoDb);
 
         try {
-            database = new Database(databaseFilename);
+            database = new Database(arquivoDb);
             Scanner scanner = new Scanner(System.in);
-            System.out.println("Bem-vindo ao mydb. Digite .exit para sair.");
 
-            if (handleLogin(scanner)) {
-                while (true) {
-                    printPrompt();
-                    scanner.useDelimiter(";");
-                    String input = scanner.next().trim();
-
-                    if (input.isEmpty()) {
-                        continue;
-                    }
-
-                    if (input.startsWith(".")) {
-                        if (handleMetaCommand(input)) {
-                            break;
-                        }
-                        continue;
-                    }
-
-                    handleStatement(input);
-                }
+            if (login(scanner)) {
+                abrirConsoleDb(scanner);
             }
 
             scanner.close();
@@ -52,35 +54,226 @@ public class Main {
         }
     }
 
-    private static boolean handleLogin(Scanner scanner) throws IOException {
-        System.out.print("Usuário: ");
-        String username = scanner.nextLine().trim();
+    private static String pegarArquivoDb(String[] args) {
+        if (args.length > 0) {
+            return args[0];
+        }
 
-        System.out.print("Senha: ");
-        String password = scanner.nextLine().trim();
+        return DB_PADRAO;
+    }
+
+    private static boolean login(Scanner scanner) throws IOException {
+        if (GraphicsEnvironment.isHeadless()) {
+            return loginNoTerminal(scanner);
+        }
 
         try {
-            Table usersTable = database.openTable("db_users");
-            Row userRow = usersTable.find(username.hashCode());
+            usarVisualDoSistema();
+            final boolean[] loginOk = { false };
+            SwingUtilities.invokeAndWait(() -> loginOk[0] = abrirTelaLogin());
+            return loginOk[0];
+        } catch (AWTError e) {
+            return loginNoTerminal(scanner);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause();
+
+            if (cause instanceof AWTError) {
+                return loginNoTerminal(scanner);
+            }
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            if (cause instanceof Error error) {
+                throw error;
+            }
+
+            throw new IOException("Erro ao exibir a interface de login.", cause);
+        }
+    }
+
+    private static boolean loginNoTerminal(Scanner scanner) {
+        System.out.print("Usuário: ");
+        String usuario = scanner.nextLine().trim();
+
+        System.out.print("Senha: ");
+        String senha = scanner.nextLine().trim();
+
+        ResultadoLogin resultado = validarLogin(usuario, senha);
+
+        if (!resultado.ok()) {
+            System.out.println(resultado.msg());
+        }
+
+        return resultado.ok();
+    }
+
+    private static ResultadoLogin validarLogin(String usuario, String senha) {
+        try {
+            Table tabelaUsers = database.openTable("db_users");
+            Row userRow = tabelaUsers.find(usuario.hashCode());
 
             if (userRow == null) {
-                System.out.println("Usuário não encontrado.");
-                return false;
+                return new ResultadoLogin(false, "Usuário não encontrado.");
             }
-            String storedHash = (String) userRow.get("password");
-            String enteredPasswordHash = Util.hashPassword(password, username);
+            String hashSalvo = (String) userRow.get("password");
+            String hashDigitado = Util.hashPassword(senha, usuario);
 
-            if (storedHash.equals(enteredPasswordHash)) {
-                return true;
-            } else {
-                System.out.println("Senha incorreta.");
-                return false;
+            if (hashSalvo.equals(hashDigitado)) {
+                return new ResultadoLogin(true, "");
             }
 
+            return new ResultadoLogin(false, "Senha incorreta.");
         } catch (IOException e) {
-            System.out.println("Erro crítico: Tabela de usuários não encontrada. O banco pode estar corrompido.");
-            return false;
+            return new ResultadoLogin(false, "Erro crítico: Tabela de usuários não encontrada. O banco pode estar corrompido.");
         }
+    }
+
+    private static void usarVisualDoSistema() {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception ignored) {
+        }
+    }
+
+    private static boolean abrirTelaLogin() {
+        final boolean[] loginOk = { false };
+
+        JDialog janela = new JDialog((java.awt.Frame) null, "Login - mydb", true);
+        janela.setDefaultCloseOperation(JDialog.DISPOSE_ON_CLOSE);
+
+        JPanel tela = new JPanel(new BorderLayout(0, 18));
+        tela.setBorder(BorderFactory.createEmptyBorder(24, 28, 24, 28));
+
+        JLabel titulo = new JLabel("mydb");
+        titulo.setFont(titulo.getFont().deriveFont(Font.BOLD, 24f));
+        tela.add(titulo, BorderLayout.NORTH);
+
+        JPanel form = new JPanel(new GridBagLayout());
+        GridBagConstraints layout = new GridBagConstraints();
+        layout.insets = new Insets(6, 0, 6, 0);
+        layout.fill = GridBagConstraints.HORIZONTAL;
+        layout.weightx = 1;
+
+        JTextField campoUser = new JTextField(22);
+        JPasswordField campoSenha = new JPasswordField(22);
+        JLabel msgErro = new JLabel(" ");
+        msgErro.setForeground(new Color(176, 0, 32));
+
+        addCampo(form, layout, 0, "Usuário", campoUser);
+        addCampo(form, layout, 1, "Senha", campoSenha);
+
+        layout.gridx = 0;
+        layout.gridy = 4;
+        layout.gridwidth = 2;
+        form.add(msgErro, layout);
+
+        tela.add(form, BorderLayout.CENTER);
+
+        JButton btnEntrar = new JButton("Entrar");
+        JButton btnCancelar = new JButton("Cancelar");
+        JPanel botoes = new JPanel(new GridBagLayout());
+
+        GridBagConstraints layoutBotoes = new GridBagConstraints();
+        layoutBotoes.insets = new Insets(0, 6, 0, 0);
+        layoutBotoes.gridx = 0;
+        layoutBotoes.gridy = 0;
+        botoes.add(btnCancelar, layoutBotoes);
+
+        layoutBotoes.gridx = 1;
+        botoes.add(btnEntrar, layoutBotoes);
+
+        tela.add(botoes, BorderLayout.SOUTH);
+
+        Runnable tentarEntrar = () -> {
+            String usuario = campoUser.getText().trim();
+            String senha = new String(campoSenha.getPassword());
+
+            if (usuario.isEmpty() || senha.isEmpty()) {
+                msgErro.setText("Informe usuário e senha.");
+                return;
+            }
+
+            ResultadoLogin resultado = validarLogin(usuario, senha);
+
+            if (resultado.ok()) {
+                loginOk[0] = true;
+                janela.dispose();
+                return;
+            }
+
+            msgErro.setText(resultado.msg());
+            campoSenha.setText("");
+            campoSenha.requestFocusInWindow();
+        };
+
+        btnEntrar.addActionListener(event -> tentarEntrar.run());
+        btnCancelar.addActionListener(event -> janela.dispose());
+        campoSenha.addActionListener(event -> tentarEntrar.run());
+        janela.getRootPane().setDefaultButton(btnEntrar);
+        escFecha(janela);
+
+        janela.setContentPane(tela);
+        janela.pack();
+        janela.setResizable(false);
+        janela.setLocationRelativeTo(null);
+        SwingUtilities.invokeLater(campoUser::requestFocusInWindow);
+        janela.setVisible(true);
+
+        return loginOk[0];
+    }
+
+    private static void addCampo(JPanel painel, GridBagConstraints layout, int linha, String label,
+            JComponent campo) {
+        layout.gridx = 0;
+        layout.gridy = linha * 2;
+        layout.gridwidth = 2;
+        painel.add(new JLabel(label), layout);
+
+        layout.gridy = linha * 2 + 1;
+        painel.add(campo, layout);
+    }
+
+    private static void escFecha(JDialog janela) {
+        janela.getRootPane()
+                .getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+                .put(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), "close");
+        janela.getRootPane()
+                .getActionMap()
+                .put("close", new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        janela.dispose();
+                    }
+                });
+    }
+
+    private static void abrirConsoleDb(Scanner scanner) throws IOException {
+        System.out.println("Bem-vindo ao mydb. Digite .exit para sair.");
+
+        while (true) {
+            printPrompt();
+            scanner.useDelimiter(";");
+            String input = scanner.next().trim();
+
+            if (input.isEmpty()) {
+                continue;
+            }
+
+            if (input.startsWith(".")) {
+                if (handleMetaCommand(input)) {
+                    break;
+                }
+                continue;
+            }
+
+            handleStatement(input);
+        }
+    }
+
+    private record ResultadoLogin(boolean ok, String msg) {
     }
 
     private static void printPrompt() {
@@ -244,7 +437,6 @@ public class Main {
     }
 
     private static void handleDelete(String statement) throws IOException {
-        // Ex: from usuarios 1
         String[] parts = statement.trim().split("\\s+");
         String tableName = parts[1];
         int key = Integer.parseInt(parts[2]);
@@ -257,7 +449,7 @@ public class Main {
         String[] parts = statement.split("set");
         String tableName = parts[0].trim();
         String valuesPart = parts[1].trim();
-        valuesPart = valuesPart.substring(1, valuesPart.length() - 1); // Remove parênteses
+        valuesPart = valuesPart.substring(1, valuesPart.length() - 1);
         String[] values = valuesPart.split(",");
 
         Table table = getTable(tableName);
